@@ -33,6 +33,8 @@ type OidcClient struct {
 	state       string
 	logger      zerolog.Logger
 
+	allowDevLogin bool
+
 	oidcProvider *gooidc.Provider
 	oidcVerifier *gooidc.IDTokenVerifier
 	oauthConfig  oauth2.Config
@@ -43,8 +45,27 @@ type OidcClient struct {
 	OnLogin func(http.ResponseWriter, *http.Request, *oauth2.Token, *gooidc.IDToken) error
 }
 
+// WithAllowDevLogin enables logging in at [login_url]?token=[jwt_id_token] with a custom token.
+// The token is still validated as usual.
+func WithAllowDevLogin(val bool) func(*OidcClient) {
+	return func(client *OidcClient) {
+		client.allowDevLogin = val
+	}
+}
+
+// WithSkipExpiryCheck disables checking token expiration time, so expired tokens can be used.
+func WithSkipExpiryCheck(val bool) func(*OidcClient) {
+	return func(client *OidcClient) {
+		client.oidcConfig.SkipExpiryCheck = val
+	}
+}
+
+// OidcClientOption is used for passing optional configuration to a OidcClient.
+type OidcClientOption func(*OidcClient)
+
 // NewOidcClient creates a new OpenID Connect client for the given provider and credentials.
-func NewOidcClient(name string, id string, secret string, redirectUrl string, providerUrl string, frontendUrl string) (*OidcClient, error) {
+func NewOidcClient(name string, id string, secret string, redirectUrl string,
+	providerUrl string, frontendUrl string, options ...OidcClientOption) (*OidcClient, error) {
 	var err error
 
 	ctx := context.Background()
@@ -62,7 +83,8 @@ func NewOidcClient(name string, id string, secret string, redirectUrl string, pr
 	}
 
 	client.oidcConfig = &gooidc.Config{
-		ClientID: id,
+		ClientID:        id,
+		SkipExpiryCheck: false,
 	}
 
 	client.oidcVerifier = client.oidcProvider.Verifier(client.oidcConfig)
@@ -76,6 +98,10 @@ func NewOidcClient(name string, id string, secret string, redirectUrl string, pr
 	}
 
 	client.state = "foobar"
+
+	for _, option := range options {
+		option(&client)
+	}
 
 	return &client, nil
 }
@@ -110,6 +136,20 @@ func (client *OidcClient) Auth() http.HandlerFunc {
 			HttpOnly: true,
 		})
 
+		// allow login with custom ID token if in developer mode
+		if rawIDToken := r.URL.Query().Get("token"); rawIDToken != "" {
+			if !client.allowDevLogin {
+				client.logger.Debug().Msg("dev token login not allowed")
+				http.Error(w, "access denied", http.StatusForbidden)
+				return
+			}
+
+			// redirect to our callback url instead of the IdP
+			client.logger.Debug().Str("state", state).Bool("withNonce", len(nonce) > 0).Msg("logging in with dev token, redirect to callback")
+			http.Redirect(w, r, client.oauthConfig.RedirectURL+"?token="+rawIDToken+"&state="+state, http.StatusFound)
+			return
+		}
+
 		client.logger.Debug().Str("state", state).Bool("withNonce", len(nonce) > 0).Msg("redirect to IdP")
 		http.Redirect(w, r, client.oauthConfig.AuthCodeURL(state, gooidc.Nonce(nonce)), http.StatusFound)
 	}
@@ -119,7 +159,11 @@ func (client *OidcClient) Auth() http.HandlerFunc {
 func (client *OidcClient) Callback() http.HandlerFunc {
 	ctx := context.Background()
 	return func(w http.ResponseWriter, r *http.Request) {
-		//log.Printf("q: %+v\n", r.URL.Query())
+		var (
+			rawIDToken  string
+			oauth2Token *oauth2.Token
+			ok          bool
+		)
 
 		cookie, err := r.Cookie("state")
 		if err != nil {
@@ -134,18 +178,29 @@ func (client *OidcClient) Callback() http.HandlerFunc {
 			return
 		}
 
-		oauth2Token, err := client.oauthConfig.Exchange(ctx, r.URL.Query().Get("code"))
-		if err != nil {
-			client.logger.Error().Err(err).Msg("token exchange failed")
-			http.Error(w, "failed to exchange code for token", http.StatusInternalServerError)
-			return
+		if rawIDToken = r.URL.Query().Get("token"); rawIDToken != "" {
+			// login with custom ID token, oauth2Token will be nil
+			if !client.allowDevLogin {
+				client.logger.Debug().Msg("dev token login not allowed")
+				http.Error(w, "access denied", http.StatusForbidden)
+				return
+			}
+		} else {
+			// get OAuth2 token using authorization code, extract ID token
+			oauth2Token, err = client.oauthConfig.Exchange(ctx, r.URL.Query().Get("code"))
+			if err != nil {
+				client.logger.Error().Err(err).Msg("token exchange failed")
+				http.Error(w, "failed to exchange code for token", http.StatusInternalServerError)
+				return
+			}
+			rawIDToken, ok = oauth2Token.Extra("id_token").(string)
+			if !ok {
+				client.logger.Error().Msg("id_token missing from IdP response")
+				http.Error(w, "IdP did not sent an id token", http.StatusInternalServerError)
+				return
+			}
 		}
-		rawIDToken, ok := oauth2Token.Extra("id_token").(string)
-		if !ok {
-			client.logger.Error().Msg("id_token missing from IdP response")
-			http.Error(w, "IdP did not sent an id token", http.StatusInternalServerError)
-			return
-		}
+
 		idToken, err := client.oidcVerifier.Verify(ctx, rawIDToken)
 		if err != nil {
 			client.logger.Error().Err(err).Msg("id token does not verify")
