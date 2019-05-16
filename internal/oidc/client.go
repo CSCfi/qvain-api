@@ -21,9 +21,6 @@ const (
 
 	// DefaultCookiePath sets the URL path cookies from this package are valid for.
 	DefaultCookiePath = "/api/auth"
-
-	// skipRedirect dumps the token to the end-user's browser instead of redirecting back to the frontend.
-	skipRedirect = false
 )
 
 var ErrMissingCSCUserName = errors.New("Missing CSCUserName field")
@@ -158,12 +155,6 @@ func (client *OidcClient) Callback() http.HandlerFunc {
 
 		// client is now successfully logged in
 		client.logger.Info().Str("sub", idToken.Subject).Msg("login")
-
-		// debug response by dumping it to the browser instead of redirecting
-		if skipRedirect {
-			client.DumpToken(w, oauth2Token, idToken)
-			return
-		}
 
 		// OnLogin callback; don't write to the response before this as it might try to set a cookie
 		//if client.OnLogin != nil && client.OnLogin(w, r, idToken.Subject, oauth2Token.Expiry) != nil {
