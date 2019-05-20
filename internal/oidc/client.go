@@ -28,6 +28,9 @@ const (
 
 var ErrMissingCSCUserName = errors.New("Missing CSCUserName field")
 
+// User should have home organization
+var ErrMissingOrganization = errors.New("Missing Organization field")
+
 // OidcClient holds the OpenID Connect and OAuth2 configuration for an authentication provider.
 type OidcClient struct {
 	Name        string
@@ -171,6 +174,10 @@ func (client *OidcClient) Callback() http.HandlerFunc {
 			if err := client.OnLogin(w, r, oauth2Token, idToken); err != nil {
 				if err == ErrMissingCSCUserName {
 					http.Redirect(w, r, client.frontendUrl+"?missingcsc=1", http.StatusFound)
+					return
+				}
+				if err == ErrMissingOrganization {
+					http.Redirect(w, r, client.frontendUrl+"?missingorg=1", http.StatusFound)
 					return
 				}
 
