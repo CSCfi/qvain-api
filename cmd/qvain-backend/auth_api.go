@@ -40,6 +40,8 @@ func NewAuthApi(config *Config, onLogin loginHook, logger zerolog.Logger) *AuthA
 		"https://"+config.Hostname+"/api/auth/cb",
 		config.oidcProviderUrl,
 		"/token",
+		oidc.WithAllowDevLogin(config.DevMode),
+		oidc.WithSkipExpiryCheck(config.DevMode),
 	)
 	if err != nil {
 		logger.Error().Err(err).Str("idp", config.oidcProviderName).Msg("oidc configuration failed")
