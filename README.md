@@ -1,7 +1,7 @@
 [![GoDoc](https://godoc.org/github.com/CSCfi/qvain-api?status.svg)](https://godoc.org/github.com/CSCfi/qvain-api)
-<!--
-[![Build Status](https://travis-ci.org/NatLibFi/qvain-api.svg?branch=next)](https://travis-ci.org/NatLibFi/qvain-api)
--->
+
+[![Build Status](https://travis-ci.org/CSCfi/qvain-api.svg?branch=next)](https://travis-ci.org/CSCfi/qvain-api)
+
 [![Go Report Card](https://goreportcard.com/badge/github.com/CSCfi/qvain-api)](https://goreportcard.com/report/github.com/CSCfi/qvain-api)
 
 # Qvain API
