@@ -13,6 +13,8 @@ DATADIRS := $(addprefix $(ROOTDIR)/,doc bench bin)
 RELEASEDIR=$(ROOTDIR)/release
 SOURCELINK := ${GOBIN}/sourcelink
 
+export PATH := $(BINDIR):$(PATH):/usr/local/go/bin/
+
 ### VCS
 TAG := $(shell git describe --tags --always --dirty="-dev" 2>/dev/null)
 HASH := $(shell git rev-parse --short HEAD 2>/dev/null)
@@ -107,3 +109,40 @@ cloc:
 listall:
 	@echo version: $(TAG)
 	@echo building all: $(CMDS)
+
+check: lint staticcheck gosec
+	go test ./...
+
+security: gosec
+
+lint:
+	@echo
+	@echo "== Ensure golint is installed =="
+	@go get -u golang.org/x/lint/golint 2> /dev/null
+	@echo "== Completed golint installation =="
+	@echo
+	@echo "== Running golint =="
+	@golint ./...
+	@echo "== Completed golint =="
+	@echo
+
+staticcheck:
+	@echo
+	@echo "== Installing staticcheck =="
+	@go get -u honnef.co/go/tools/cmd/staticcheck 2> /dev/null
+	@echo "== Completed staticcheck installation =="
+	@echo
+	@echo "== Running staticcheck =="
+	-@staticcheck -f stylish ./...
+	@echo "== Completed staticcheck =="
+	@echo
+
+gosec:
+	@echo
+	@echo "== Installing gosec =="
+	@go get github.com/securego/gosec/cmd/gosec
+	@echo "== Completed gosec installation =="
+	@echo
+	@echo "== Running gosec =="
+	-@gosec ./...
+	@echo "== Completed gosec =="
