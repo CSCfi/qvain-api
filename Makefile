@@ -111,7 +111,11 @@ listall:
 	@echo building all: $(CMDS)
 
 check: lint staticcheck gosec
-	go test ./...
+	@echo
+	@echo "== Running tests =="
+	-@go test ./...
+	@echo "== Completed tests =="
+	@echo
 
 security: gosec
 
