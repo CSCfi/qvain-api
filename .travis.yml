@@ -1,9 +1,12 @@
 language: go
-
 go:
-  - "1.11.x"
-  - "1.x"
-
-install: go get -t ./cmd/...
-
-script: go build -v ./cmd/...
+- 1.11.x
+- 1.x
+install:
+- go get -t ./cmd/...
+script:
+- go build -v ./cmd/...
+- make check
+notifications:
+  flowdock:
+    secure: F2sLef9LUClK1jz/QXI4Muv+SlTMjMeVx8eYvug/w23D0CGLEv2XxBXf0kQ5mVzv8Hd/9huLa8ztCzY5FPZ92KckVbDUpalOf30h6E+OOIdQ38d5gu31TJptJ3AJPSCJ5Fb6wZ1zuzRWZdsfzrVJc+397XyGnk6M8eFP3lVMigtvWfrSmqzsjD0ZYEu7LRMvE2U27oL1x6YrShABGRYOmAwfeALL2wHXa+O2DSoySAY3aQ4q8Pr0mT/MnKWiXHb0qh3K/CfYPsRkefx5SbZAUsXh9ulniJx2DADEOotWLwv7Jn27MLFvx/s0AdJkib+9rLIvA2bjlP5nAc87vJXCmmOYnyA93SauCRAJNHEN5m/Wtvba09dPsbzdnwcvPA+gNMsOAjT5kf3cP2lwPR2sCuY82ohMH9W3jQsdLJ+WhQkoDVpYIhj6iPOa/Po6JmEJa4UJAWSMYXt9ArEKluR/99Zesd5LndC7zIxWQFqUKGu/unie9QpO2YX39VQheK5GSCPfkwYpFogngNPrl5PPPhtRKEiowWMiZV1K8TL/+oriUsdzD7LCEbD2oSi0RxeeDHeJblO7ky5H6tuWASOj3G2aO695CuoZoBaJ5C3Cq13jy1AunTemydZD5WRx72cFUetdvEHH75/JmRQMyOunCGb3h5zti15QRNVfRGSranI=
