@@ -44,7 +44,7 @@ func recorderToResponse(recorder *httptest.ResponseRecorder, response *http.Resp
 	response.Trailer = result.Trailer
 }
 
-// checkProjectIdentifierMap checks map for project_identifiers recursively.
+// checkProjectIdentifierMap checks project_identifiers in map recursively.
 func checkProjectIdentifierMap(session *sessions.Session, m map[string]interface{}) bool {
 	for key, v := range m {
 		switch vv := v.(type) {
@@ -65,7 +65,7 @@ func checkProjectIdentifierMap(session *sessions.Session, m map[string]interface
 	return true
 }
 
-// checkProjectIdentifierMap checks array for project_identifiers recursively.
+// checkProjectIdentifierMap checks project_identifiers in array recursively.
 func checkProjectIdentifierArray(session *sessions.Session, a []interface{}) bool {
 	for _, v := range a {
 		switch vv := v.(type) {
@@ -90,6 +90,7 @@ func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) 
 			return nil // respond with original error
 		}
 
+		// read body
 		body, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			recorder := httptest.NewRecorder()
@@ -97,8 +98,10 @@ func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) 
 			recorderToResponse(recorder, response)
 			return nil
 		}
-
 		response.Body.Close()
+		response.Body = ioutil.NopCloser(bytes.NewBuffer(body)) // make body readable again
+
+		// parse json
 		var data map[string]interface{}
 		err = json.Unmarshal(body, &data)
 		if err != nil {
@@ -108,8 +111,7 @@ func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) 
 			return nil
 		}
 
-		response.Body = ioutil.NopCloser(bytes.NewBuffer(body)) // make body readable again
-
+		// get user session
 		session, err := sessions.UserSessionFromRequest(response.Request)
 		if err != nil {
 			// Our error helper functions need a ResponseWriter so we cannot use response directly.
