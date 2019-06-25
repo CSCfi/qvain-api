@@ -44,23 +44,48 @@ func recorderToResponse(recorder *httptest.ResponseRecorder, response *http.Resp
 	response.Trailer = result.Trailer
 }
 
+// checkProjectIdentifierMap checks map for project_identifiers recursively.
+func checkProjectIdentifierMap(session *sessions.Session, m map[string]interface{}) bool {
+	for key, v := range m {
+		switch vv := v.(type) {
+		case string:
+			if key == "project_identifier" && !session.User.HasProject(vv) {
+				return false
+			}
+		case map[string]interface{}:
+			if !checkProjectIdentifierMap(session, vv) {
+				return false
+			}
+		case []interface{}:
+			if !checkProjectIdentifierArray(session, vv) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// checkProjectIdentifierMap checks array for project_identifiers recursively.
+func checkProjectIdentifierArray(session *sessions.Session, a []interface{}) bool {
+	for _, v := range a {
+		switch vv := v.(type) {
+		case map[string]interface{}:
+			if !checkProjectIdentifierMap(session, vv) {
+				return false
+			}
+		case []interface{}:
+			if !checkProjectIdentifierArray(session, vv) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // makeModifyResponse makes a callback function to handle the response. This is used for
 // checking that a Metax response does not contain invalid projects.
 func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) func(*http.Response) error {
 	return func(response *http.Response) error {
-		// The response body is checked for project_identifiers in one of these two formats:
-		//   { project_identifier: x, ... }
-		// or
-		//   { results: [{ project_identifier: x, ...}, { project_identifier: y, ...}, ...], ... }
-		type ArrayObject struct {
-			ProjectIdentifier string `json:"project_identifier"`
-		}
-
-		var data struct {
-			ProjectIdentifier string        `json:"project_identifier"`
-			Results           []ArrayObject `json:"results"`
-		}
-
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			return nil // respond with original error
 		}
@@ -74,6 +99,7 @@ func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) 
 		}
 
 		response.Body.Close()
+		var data map[string]interface{}
 		err = json.Unmarshal(body, &data)
 		if err != nil {
 			recorder := httptest.NewRecorder()
@@ -94,27 +120,8 @@ func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) 
 			return nil
 		}
 
-		// single element
-		projectsOk := true
-		if data.ProjectIdentifier != "" {
-			logger.Debug().Str("project_identifier", data.ProjectIdentifier).Msg("response has project")
-			if !session.User.HasProject(data.ProjectIdentifier) {
-				projectsOk = false
-			}
-		}
-
-		// object with array of elements that may have different project identifiers
-		for index, obj := range data.Results {
-			if obj.ProjectIdentifier != "" {
-				if !session.User.HasProject(obj.ProjectIdentifier) {
-					logger.Debug().Int("index", index).Str("project_identifier", data.ProjectIdentifier).Msg("project invalid for user")
-					projectsOk = false
-					break
-				}
-			}
-		}
-
-		if !projectsOk {
+		// check response for project_identifier strings recursively
+		if !checkProjectIdentifierMap(session, data) {
 			recorder := httptest.NewRecorder()
 			jsonError(recorder, "invalid project in response", http.StatusForbidden)
 			recorderToResponse(recorder, response)

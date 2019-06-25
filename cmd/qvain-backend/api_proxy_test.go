@@ -22,6 +22,10 @@ var (
 		"3": `{"project_identifier": "3"}`,
 		"4": `{"results": [{"project_identifier": "1"}, {"project_identifier": "4"}]}`,
 		"5": `{project_identifier: "1"}`, // invalid json; missing quotes in key
+		"6": `{"directories": [{"project_identifier": "1"}, {"project_identifier": "4"}]}`,
+		"7": `{"testing": {"nesting": [ {"foo": "bar"}, {"project_identifier": "5"}]}}`,
+		"8": `{"testing": {"nesting": [ {"foo": "bar"}, {"project_identifier": "1"}]}}`,
+		"9": `{"testing": {"nesting": [ {foo: "bar"}, {"project_identifier": "1"}]}}`, // missing quotes in key
 	}
 
 	userProjects = []string{"1", "2"}
@@ -137,6 +141,13 @@ func TestApiProxy(t *testing.T) {
 		http.StatusOK,
 	)
 
+	// ok, return nested result
+	tryRequest(t,
+		"/directories/fakeurl?project=1&response=8",
+		RequestConfig{},
+		http.StatusOK,
+	)
+
 	// ok, no project specified, return result object array
 	tryRequest(t,
 		"/directories/fakeurl?response=2",
@@ -186,9 +197,23 @@ func TestApiProxy(t *testing.T) {
 		http.StatusForbidden,
 	)
 
-	// fail, invalid project in multiple object response
+	// fail, invalid project in response results
 	tryRequest(t,
 		"/directories/fakeurl?project=2&response=4",
+		RequestConfig{},
+		http.StatusForbidden,
+	)
+
+	// fail, invalid project in response directories array
+	tryRequest(t,
+		"/directories/fakeurl?project=2&response=6",
+		RequestConfig{},
+		http.StatusForbidden,
+	)
+
+	// fail, invalid project in nested response
+	tryRequest(t,
+		"/directories/fakeurl?project=2&response=7",
 		RequestConfig{},
 		http.StatusForbidden,
 	)
@@ -210,6 +235,13 @@ func TestApiProxy(t *testing.T) {
 	// fail, invalid json
 	tryRequest(t,
 		"/directories/fakeurl?response=5",
+		RequestConfig{},
+		http.StatusInternalServerError,
+	)
+
+	// fail, invalid json
+	tryRequest(t,
+		"/directories/fakeurl?response=9",
 		RequestConfig{},
 		http.StatusInternalServerError,
 	)
