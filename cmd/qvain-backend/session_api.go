@@ -47,17 +47,10 @@ func (api *SessionApi) Current(w http.ResponseWriter, r *http.Request) {
 
 // Logout deletes the current user session and returns a json response.
 func (api *SessionApi) Logout(w http.ResponseWriter, r *http.Request) {
-	sid, err := sessions.GetSessionCookie(r)
-	if err != nil {
-		api.logger.Debug().Err(err).Msg("no session cookie found")
-		sessionError(w, sessions.ErrSessionNotFound)
-		return
-	}
-	success := api.sessions.DestroyWithCookie(w, sid)
-	if !success {
-		api.logger.Debug().Msg("failed to destroy session")
-		sessionError(w, sessions.ErrSessionNotFound)
-		return
+	// If there is no session cookie or destroying session fails, assume
+	// it was already deleted and report successful logout.
+	if sid, err := sessions.GetSessionCookie(r); err == nil {
+		api.sessions.DestroyWithCookie(w, sid)
 	}
 
 	apiWriteHeaders(w)
