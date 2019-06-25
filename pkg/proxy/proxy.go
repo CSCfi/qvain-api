@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"crypto/tls"
 	"encoding/base64"
 	"net"
 	"net/http"
@@ -88,16 +89,23 @@ func NewSingleHostReverseProxy(target *url.URL, opts ...proxyOption) *httputil.R
 		IdleConnTimeout:     90 * time.Second,
 		TLSHandshakeTimeout: 10 * time.Second,
 		DisableKeepAlives:   false,
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: config.InsecureCertificates},
 	}
 	//return &httputil.ReverseProxy{Director: director, BufferPool: NewBufferPool() }
-	return &httputil.ReverseProxy{Director: director, Transport: transport, ErrorHandler: config.ErrorHandler}
+	return &httputil.ReverseProxy{
+		Director:       director,
+		Transport:      transport,
+		ErrorHandler:   config.ErrorHandler,
+		ModifyResponse: config.ModifyResponse}
 }
 
 // proxyConfig holds the fields that can be configured for a proxy.
 type proxyConfig struct {
-	UserAgent    string
-	AuthHeader   string
-	ErrorHandler func(http.ResponseWriter, *http.Request, error)
+	UserAgent            string
+	AuthHeader           string
+	ErrorHandler         func(http.ResponseWriter, *http.Request, error)
+	ModifyResponse       func(*http.Response) error
+	InsecureCertificates bool
 }
 
 // proxyOption is an option that can be configured when creating a proxy instance.
@@ -114,6 +122,20 @@ func WithUserAgent(ua string) proxyOption {
 func WithErrorHandler(handler func(http.ResponseWriter, *http.Request, error)) proxyOption {
 	return func(config *proxyConfig) {
 		config.ErrorHandler = handler
+	}
+}
+
+// WithModifyResponse sets the ModifyResponse callback function in Go's ReverseProxy.
+func WithModifyResponse(callback func(*http.Response) error) proxyOption {
+	return func(config *proxyConfig) {
+		config.ModifyResponse = callback
+	}
+}
+
+// WithInsecureCertificates can be used to make proxy allow self-signed certificates for development.
+func WithInsecureCertificates(enable bool) proxyOption {
+	return func(config *proxyConfig) {
+		config.InsecureCertificates = enable
 	}
 }
 

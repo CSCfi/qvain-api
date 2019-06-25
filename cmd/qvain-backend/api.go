@@ -3,7 +3,6 @@ package main
 import (
 	"expvar"
 	"net/http"
-	"strings"
 
 	"github.com/CSCfi/qvain-api/pkg/metax"
 	"github.com/rs/zerolog"
@@ -67,6 +66,7 @@ func NewApis(config *Config) *Apis {
 		config.metaxApiPass,
 		config.sessions,
 		config.NewLogger("proxy"),
+		config.DevMode,
 	)
 	apis.lookup = NewLookupApi(config.db)
 
@@ -90,13 +90,7 @@ func (apis *Apis) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		apis.auth.ServeHTTP(w, r)
 	case "proxy/":
 		proxyC.Add(1)
-		// only allow access to /directories and /files; path has been cleaned by Go on instantiation
-		// TODO: make prefix filter in proxy package?
-		if strings.HasPrefix(r.URL.Path, "/directories/") || strings.HasPrefix(r.URL.Path, "/files/") {
-			apis.proxy.ServeHTTP(w, r)
-		} else {
-			jsonError(w, "access denied", http.StatusForbidden)
-		}
+		apis.proxy.ServeHTTP(w, r)
 	case "lookup/":
 		lookupC.Add(1)
 		apis.lookup.ServeHTTP(w, r)
