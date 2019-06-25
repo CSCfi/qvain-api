@@ -55,7 +55,11 @@ func NewApis(config *Config) *Apis {
 		metax.WithInsecureCertificates(config.DevMode))
 
 	apis.datasets = NewDatasetApi(config.db, config.sessions, metax, config.NewLogger("datasets"))
-	apis.sessions = NewSessionApi(config.sessions, config.NewLogger("sessions"))
+	apis.sessions = NewSessionApi(
+		config.sessions,
+		config.NewLogger("sessions"),
+		config.oidcProviderUrl+"/idp/profile/Logout",
+	)
 	apis.auth = NewAuthApi(config, makeOnFairdataLogin(metax, config.db, config.NewLogger("sync")), config.NewLogger("auth"))
 	apis.proxy = NewApiProxy(
 		"https://"+config.MetaxApiHost+"/rest/",
