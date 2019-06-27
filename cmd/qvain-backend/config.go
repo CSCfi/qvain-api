@@ -8,7 +8,6 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/CSCfi/qvain-api/internal/jwt"
 	"github.com/CSCfi/qvain-api/internal/psql"
 	"github.com/CSCfi/qvain-api/internal/secmsg"
 	"github.com/CSCfi/qvain-api/internal/sessions"
@@ -46,7 +45,6 @@ type Config struct {
 	// configured service instances
 	db        *psql.DB
 	sessions  *sessions.Manager
-	tokens    *jwt.JwtHandler
 	messenger *secmsg.MessageService
 }
 
@@ -78,16 +76,13 @@ func ConfigFromEnv() (*Config, error) {
 			if err != nil {
 				return nil, fmt.Errorf("can't decode APP_DEV_USER: %s", err)
 			}
-			//fmt.Printf("decoded: %s\n", b)
 			var user models.User
 			user.UnmarshalJSON(b)
-			//fmt.Printf("%+v\n", user)
 		}
 	}
 
 	return &Config{
-		Hostname: hostname,
-		//Port:             env.GetDefault("APP_HTTP_PORT", HttpProxyPort),
+		Hostname:         hostname,
 		Port:             *appHttpPort,
 		Standalone:       env.GetBool("APP_HTTP_STANDALONE"),
 		ForceHttpOnly:    *forceHttpOnly,
@@ -126,11 +121,6 @@ func (config *Config) initDB(logger zerolog.Logger) (err error) {
 func (config *Config) initSessions() error {
 	config.sessions = sessions.NewManager(sessions.WithRequireCSCUserName(!config.DevMode))
 	return nil
-}
-
-// initTokens initialises the token service.
-func (config *Config) initTokens() {
-	config.tokens = jwt.NewJwtHandler(config.tokenKey, config.Hostname, jwt.Verbose, jwt.RequireJwtID, jwt.WithErrorFunc(jsonError))
 }
 
 // initMessenger initialises the secure message service.

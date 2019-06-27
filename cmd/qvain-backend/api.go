@@ -3,7 +3,6 @@ package main
 import (
 	"expvar"
 	"net/http"
-	"strings"
 
 	"github.com/CSCfi/qvain-api/pkg/metax"
 	"github.com/rs/zerolog"
@@ -37,7 +36,6 @@ type Apis struct {
 	logger zerolog.Logger
 
 	datasets *DatasetApi
-	objects  *ObjectApi
 	sessions *SessionApi
 	auth     *AuthApi
 	proxy    *ApiProxy
@@ -56,9 +54,11 @@ func NewApis(config *Config) *Apis {
 		metax.WithInsecureCertificates(config.DevMode))
 
 	apis.datasets = NewDatasetApi(config.db, config.sessions, metax, config.NewLogger("datasets"))
-	apis.objects = NewObjectApi(config.db, config.NewLogger("objects"))
-	apis.sessions = NewSessionApi(config.sessions, config.db, config.messenger, config.NewLogger("sessions"))
-	apis.sessions.AllowCreate(config.DevMode)
+	apis.sessions = NewSessionApi(
+		config.sessions,
+		config.NewLogger("sessions"),
+		config.oidcProviderUrl+"/idp/profile/Logout",
+	)
 	apis.auth = NewAuthApi(config, makeOnFairdataLogin(metax, config.db, config.NewLogger("sync")), config.NewLogger("auth"))
 	apis.proxy = NewApiProxy(
 		"https://"+config.MetaxApiHost+"/rest/",
@@ -66,6 +66,7 @@ func NewApis(config *Config) *Apis {
 		config.metaxApiPass,
 		config.sessions,
 		config.NewLogger("proxy"),
+		config.DevMode,
 	)
 	apis.lookup = NewLookupApi(config.db)
 
@@ -81,9 +82,6 @@ func (apis *Apis) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "datasets/":
 		datasetsC.Add(1)
 		apis.datasets.ServeHTTP(w, r)
-	case "objects/":
-		objectsC.Add(1)
-		apis.objects.ServeHTTP(w, r)
 	case "sessions/":
 		sessionsC.Add(1)
 		apis.sessions.ServeHTTP(w, r)
@@ -92,13 +90,7 @@ func (apis *Apis) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		apis.auth.ServeHTTP(w, r)
 	case "proxy/":
 		proxyC.Add(1)
-		// only allow access to /directories and /files; path has been cleaned by Go on instantiation
-		// TODO: make prefix filter in proxy package?
-		if strings.HasPrefix(r.URL.Path, "/directories/") || strings.HasPrefix(r.URL.Path, "/files/") {
-			apis.proxy.ServeHTTP(w, r)
-		} else {
-			jsonError(w, "access denied", http.StatusForbidden)
-		}
+		apis.proxy.ServeHTTP(w, r)
 	case "lookup/":
 		lookupC.Add(1)
 		apis.lookup.ServeHTTP(w, r)

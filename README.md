@@ -1,14 +1,14 @@
 [![GoDoc](https://godoc.org/github.com/CSCfi/qvain-api?status.svg)](https://godoc.org/github.com/CSCfi/qvain-api)
-<!--
-[![Build Status](https://travis-ci.org/NatLibFi/qvain-api.svg?branch=next)](https://travis-ci.org/NatLibFi/qvain-api)
--->
+
+[![Build Status](https://travis-ci.org/CSCfi/qvain-api.svg?branch=next)](https://travis-ci.org/CSCfi/qvain-api)
+
 [![Go Report Card](https://goreportcard.com/badge/github.com/CSCfi/qvain-api)](https://goreportcard.com/report/github.com/CSCfi/qvain-api)
 
 # Qvain API
 
 ## Introduction
 
-Qvain is a web application for description of metadata based on a [JSON schema](http://json-schema.org/). It is developed by the [National Library of Finland](https://www.kansalliskirjasto.fi/en) as part of the [FairData](https://fairdata.fi/) project.
+Qvain is the metadata editor for the [FairData](https://fairdata.fi/) project by the Finnish Ministry of Education and Culture. It has been developed by the National Library of Finland.
 
 This repository contains the server backend, written in the [Go](https://golang.org/) programming language.
 

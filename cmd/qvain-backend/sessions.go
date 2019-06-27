@@ -86,6 +86,11 @@ func MakeSessionHandlerForFairdata(mgr *sessions.Manager, db *psql.DB, onLogin l
 			identity = claims.CSCUserName
 		}
 
+		//user should have home organization
+		if claims.Org == "" {
+			return oidc.ErrMissingOrganization
+		}
+
 		uid, isNew, err := db.RegisterIdentity(svc, identity)
 		if err != nil {
 			return err
