@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/NatLibFi/qvain-api/metax"
-	"github.com/wvh/uuid/flag"
+	"os"
+
+	"github.com/CSCfi/qvain-api/pkg/metax"
+	uuidflag "github.com/wvh/uuid/flag"
 )
 
 var stringIfMissing = ""
@@ -62,7 +64,7 @@ func runDatasets(url string, args []string) error {
 	}
 
 	fmt.Println("querying metax datasets endpoint")
-	svc := metax.NewMetaxService(METAX_HOST)
+	svc := metax.NewMetaxService(METAX_HOST, metax.WithCredentials(os.Getenv("APP_METAX_API_USER"), os.Getenv("APP_METAX_API_PASS")))
 	// 053bffbcc41edad4853bea91fc42ea18
 	response, err := svc.Datasets(metax.WithOwner(owner.String()))
 	if err != nil {
@@ -100,15 +102,14 @@ func runDatasets(url string, args []string) error {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	//ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
 	defer cancel()
 
-	c, errc, err := svc.ReadStreamChannel(ctx, metax.WithOwner(owner.String()))
+	total, c, errc, err := svc.ReadStreamChannel(ctx, metax.WithOwner(owner.String()))
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("channel response:")
+	fmt.Printf("channel response (%d datasets):", total)
 	i := 0
 	success := false
 

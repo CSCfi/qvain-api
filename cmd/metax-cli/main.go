@@ -17,7 +17,9 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/NatLibFi/qvain-api/version"
+	"github.com/CSCfi/qvain-api/internal/version"
+
+	"github.com/rs/zerolog"
 )
 
 const ProgramName = "metax-query"
@@ -29,13 +31,23 @@ const (
 	VERSION_URL  = "/rest/version"
 )
 
-var Verbose bool
+var (
+	Verbose bool
+	Logger  zerolog.Logger
+)
+
+func init() {
+	zerolog.TimeFieldFormat = "15:04:05.000000"
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+
+	Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "15:04:05.000000"}).With().Caller().Timestamp().Logger()
+}
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "  datasets   query dataset API endpoint")
 	fmt.Fprintln(os.Stderr, "  fetch      fetch from dataset API endpoint")
-	fmt.Fprintln(os.Stderr, "  create     post new dataset to API endpoint")
+	fmt.Fprintln(os.Stderr, "  publish    publish dataset to API endpoint")
 	fmt.Fprintln(os.Stderr, "  version    query version")
 	fmt.Fprintln(os.Stderr, "")
 }
@@ -93,9 +105,9 @@ func main() {
 	case "fetch":
 		endpoint = DATASETS_URL
 		run = runFetch
-	case "create":
+	case "publish":
 		endpoint = DATASETS_URL
-		run = runCreate
+		run = runPublish
 	case "version":
 		run = runVersion
 	default:

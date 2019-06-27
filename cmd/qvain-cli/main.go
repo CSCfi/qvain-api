@@ -8,8 +8,8 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/NatLibFi/qvain-api/psql"
-	"github.com/NatLibFi/qvain-api/version"
+	"github.com/CSCfi/qvain-api/internal/psql"
+	"github.com/CSCfi/qvain-api/internal/version"
 )
 
 const ProgramName = "qvain-cli"
@@ -90,7 +90,7 @@ func main() {
 	case "add":
 		run = runAddRecord
 	case "view":
-		run = runViewByOwner
+		run = runViewDatasetsByOwner
 	case "export":
 		run = runExportDataset
 	case "version":

@@ -1,30 +1,43 @@
 package main
 
 import (
-	"context"
+	//"context"
 	"flag"
 	"fmt"
+	"os"
 	"time"
 
-	"github.com/NatLibFi/qvain-api/metax"
-	"github.com/NatLibFi/qvain-api/psql"
+	"github.com/CSCfi/qvain-api/internal/psql"
+	"github.com/CSCfi/qvain-api/internal/shared"
+	"github.com/CSCfi/qvain-api/pkg/metax"
+	"github.com/wvh/uuid"
 	"github.com/wvh/uuid/flag"
 )
 
 func runFetch(url string, args []string) error {
 	flags := flag.NewFlagSet("sync", flag.ExitOnError)
 	var (
-		owner uuidflag.Uuid
-		since string
-		ago   time.Duration
+		owner    uuidflag.Uuid
+		service  string
+		identity string
+		since    string
+		ago      time.Duration
+
+		uid uuid.UUID
 	)
 	flags.Var(&owner, "owner", "owner `uuid`")
+	flags.StringVar(&service, "service", "fairdata", "external service")
+	flags.StringVar(&identity, "identity", "", "external identity")
 	flags.StringVar(&since, "since", "", "date in iso-8601 format for Last Modified Since header")
 	flags.DurationVar(&ago, "ago", 0, "duration relative to Now() for Last-Modified-Since header, e.g.: \"2h30m\"")
 
-	flags.Usage = usageFor(flags, "datasets [flags]")
+	flags.Usage = usageFor(flags, "fetch [flags]")
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+
+	if !owner.IsSet() && identity == "" {
+		return fmt.Errorf("provide at least one of -owner or -identity")
 	}
 
 	if since != "" && ago != 0 {
@@ -49,70 +62,34 @@ func runFetch(url string, args []string) error {
 		fmt.Println("Last-Modified-Since:", sinceHeader)
 	}
 
-	if owner.IsSet() {
-		fmt.Println("User:", owner)
-	}
-
 	fmt.Println("syncing with metax datasets endpoint")
-	pg, err := psql.NewPoolServiceFromEnv()
+	db, err := psql.NewPoolServiceFromEnv()
 	if err != nil {
 		return err
 	}
-	//fmt.Println(pg.Check())
-	fmt.Println(pg.Version())
+	//fmt.Println(db.Version())
 
-	batch, err := pg.NewBatch()
-	if err != nil {
-		return err
-	}
-	defer batch.Rollback()
-
-	svc := metax.NewMetaxService(METAX_HOST)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	c, errc, err := svc.ReadStreamChannel(ctx, metax.WithOwner(owner.String()))
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("channel response:")
-	i := 0
-	success := false
-
-Done:
-	for {
-		select {
-		case rawRecord, more := <-c:
-			if !more {
-				success = true
-				break Done
-			}
-			fmt.Printf("%05d:\n", i+1)
-			i++
-			dataset, err := rawRecord.ToQvain()
-			if err != nil {
-				//return err
-				fmt.Println("  skipping:", err)
-				continue
-			}
-			fmt.Println("  id:", dataset.Id)
-			if err = batch.Store(dataset); err != nil {
-				fmt.Println("  Store error:", err)
-				continue
-			}
-		case err := <-errc:
-			fmt.Println("api error:", ctx.Err())
-			return err
-		case <-ctx.Done():
-			fmt.Println("api timeout:", ctx.Err())
+	if identity != "" && !owner.IsSet() {
+		uid, err = db.GetUidForIdentity(service, identity)
+		if err != nil {
 			return err
 		}
+	} else if identity == "" && owner.IsSet() {
+		identity, err = db.GetIdentityForUid(service, owner.Get())
+		if err != nil {
+			return err
+		}
+		uid = owner.Get()
 	}
-	if success {
-		batch.Commit()
+	fmt.Printf("request to sync for uid %v identity %q at service %q\n", uid, identity, service)
+
+	api := metax.NewMetaxService(METAX_HOST, metax.WithCredentials(os.Getenv("APP_METAX_API_USER"), os.Getenv("APP_METAX_API_PASS")))
+
+	err = shared.FetchSince(api, db, Logger, uid, identity, sinceHeader)
+	if err != nil {
+		return err
 	}
-	fmt.Println("success:", success)
+
+	fmt.Println("success")
 	return nil
 }
