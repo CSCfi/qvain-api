@@ -2,18 +2,18 @@ package shared
 
 import (
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/CSCfi/qvain-api/internal/psql"
+	"github.com/CSCfi/qvain-api/pkg/env"
 	"github.com/CSCfi/qvain-api/pkg/metax"
 	"github.com/CSCfi/qvain-api/pkg/models"
 
 	"github.com/wvh/uuid"
 )
 
-var owner = uuid.MustFromString("053bffbcc41edad4853bea91fc42ea18")
+var ownerUuid = uuid.MustFromString("053bffbcc41edad4853bea91fc42ea18")
 
 func readFile(tb testing.TB, fn string) []byte {
 	path := filepath.Join("..", "..", "pkg", "metax", "testdata", fn)
@@ -85,12 +85,31 @@ func TestPublish(t *testing.T) {
 		t.Fatal("psql:", err)
 	}
 
-	api := metax.NewMetaxService(os.Getenv("APP_METAX_API_HOST"), metax.WithCredentials(os.Getenv("APP_METAX_API_USER"), os.Getenv("APP_METAX_API_PASS")))
+	api := metax.NewMetaxService(
+		env.Get("APP_METAX_API_HOST"),
+		metax.WithCredentials(env.Get("APP_METAX_API_USER"), env.Get("APP_METAX_API_PASS")),
+		metax.WithInsecureCertificates(env.GetBool("APP_DEV_MODE")),
+	)
+
+	owner := &models.User{
+		Uid:      ownerUuid,
+		Projects: []string{"project_x"},
+	}
+
+	wrongProjectOwner := &models.User{
+		Uid:      ownerUuid,
+		Projects: []string{"wrong_project_x_y_z"},
+	}
+
+	noProjectOwner := &models.User{
+		Uid:      ownerUuid,
+		Projects: []string{},
+	}
 
 	for _, test := range tests {
 		blob := readFile(t, test.fn)
 
-		dataset, err := models.NewDataset(owner)
+		dataset, err := models.NewDataset(owner.Uid)
 		if err != nil {
 			t.Fatal("models.NewDataset():", err)
 		}
@@ -106,6 +125,22 @@ func TestPublish(t *testing.T) {
 
 		var versionId string
 
+		// tests that should fail with *metax.ApiError 403 due to project permissions
+		t.Run(test.fn+"(wrong project)", func(t *testing.T) {
+			_, _, _, err := Publish(api, db, id, wrongProjectOwner)
+			if apiErr, ok := err.(*metax.ApiError); !ok || apiErr.StatusCode() != 403 {
+				t.Error("error: wrongProjectOwner should have failed with 403")
+			}
+		})
+
+		t.Run(test.fn+"(no project)", func(t *testing.T) {
+			_, _, _, err := Publish(api, db, id, noProjectOwner)
+			if apiErr, ok := err.(*metax.ApiError); !ok || apiErr.StatusCode() != 403 {
+				t.Error("error: noProjectOwner should have failed with 403")
+			}
+		})
+
+		// test that should publish succesfully
 		t.Run(test.fn+"(new)", func(t *testing.T) {
 			vId, nId, _, err := Publish(api, db, id, owner)
 			if err != nil {
@@ -128,6 +163,7 @@ func TestPublish(t *testing.T) {
 			t.Fatal("modifyTitleFromDataset():", err)
 		}
 
+		// test that should update
 		t.Run(test.fn+"(update)", func(t *testing.T) {
 			vId, nId, _, err := Publish(api, db, id, owner)
 			if err != nil {
@@ -153,6 +189,7 @@ func TestPublish(t *testing.T) {
 			t.Fatal("deleteFilesFromFairdataDataset():", err)
 		}
 
+		// test that should remove files and create a new version
 		t.Run(test.fn+"(files)", func(t *testing.T) {
 			vId, nId, qId, err := Publish(api, db, id, owner)
 			if err != nil {
