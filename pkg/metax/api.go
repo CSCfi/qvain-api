@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/CSCfi/qvain-api/pkg/models"
 	"github.com/rs/zerolog"
 	//"github.com/rs/zerolog/log"
 )
@@ -545,7 +546,7 @@ func (api *MetaxService) Create(ctx context.Context, blob json.RawMessage) (json
 // otherwise it is PUT to the endpoint for that specific dataset identifier.
 // If the request was successful, the dataset will be returned;
 // if the request failed, and the response was in JSON format, the API error will include that error body.
-func (api *MetaxService) Store(ctx context.Context, blob json.RawMessage) (json.RawMessage, error) {
+func (api *MetaxService) Store(ctx context.Context, blob json.RawMessage, owner *models.User) (json.RawMessage, error) {
 	if blob == nil || len(blob) < 1 {
 		return nil, errEmptyDataset
 	}
@@ -565,6 +566,7 @@ func (api *MetaxService) Store(ctx context.Context, blob json.RawMessage) (json.
 	if err != nil {
 		return nil, err
 	}
+	req.URL.RawQuery = owner.AddAllowedProjects(req.URL.RawQuery)
 
 	api.writeApiHeaders(req)
 

@@ -60,8 +60,25 @@ func (rt *DummyRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 
 	// expect allowed_projects if method is not GET
 	if request.Method != http.MethodGet {
-		if query.Get("allowed_projects") == "" {
+		allowedProjectsStr := query.Get("allowed_projects")
+		if allowedProjectsStr == "" {
 			response := errorResponse(request, "non-get request should have allowed_projects", http.StatusBadRequest)
+			return response, nil
+		}
+
+		// check that allowed_projects contains the same projects as user.Projects
+		allowedProjects := strings.Split(allowedProjectsStr, ",")
+		found := 0
+		for _, project := range allowedProjects {
+			for _, userProject := range userProjects {
+				if userProject == project {
+					found++
+					break
+				}
+			}
+		}
+		if found != len(allowedProjects) {
+			response := errorResponse(request, "allowed_projects does not match user projects", http.StatusBadRequest)
 			return response, nil
 		}
 	}

@@ -160,7 +160,7 @@ func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *mod
 		return
 	case "publish":
 		if checkMethod(w, r, http.MethodPost) {
-			api.publishDataset(w, r, user.Uid, id)
+			api.publishDataset(w, r, user, id)
 		}
 		return
 	default:
@@ -257,18 +257,18 @@ func (api *DatasetApi) updateDataset(w http.ResponseWriter, r *http.Request, own
 	api.Created(w, r, typed.Unwrap().Id)
 }
 
-func (api *DatasetApi) publishDataset(w http.ResponseWriter, r *http.Request, owner uuid.UUID, id uuid.UUID) {
+func (api *DatasetApi) publishDataset(w http.ResponseWriter, r *http.Request, owner *models.User, id uuid.UUID) {
 	vId, nId, qId, err := shared.Publish(api.metax, api.db, id, owner)
 	if err != nil {
 		switch t := err.(type) {
 		case *metax.ApiError:
-			api.logger.Warn().Err(err).Str("dataset", id.String()).Str("owner", owner.String()).Str("origin", "api").Msg("publish failed")
+			api.logger.Warn().Err(err).Str("dataset", id.String()).Str("owner", owner.Uid.String()).Str("origin", "api").Msg("publish failed")
 			jsonErrorWithPayload(w, t.Error(), "metax", t.OriginalError(), convertExternalStatusCode(t.StatusCode()))
 		case *psql.DatabaseError:
-			api.logger.Error().Err(err).Str("dataset", id.String()).Str("owner", owner.String()).Str("origin", "database").Msg("publish failed")
+			api.logger.Error().Err(err).Str("dataset", id.String()).Str("owner", owner.Uid.String()).Str("origin", "database").Msg("publish failed")
 			dbError(w, err)
 		default:
-			api.logger.Error().Err(err).Str("dataset", id.String()).Str("owner", owner.String()).Str("origin", "other").Msg("publish failed")
+			api.logger.Error().Err(err).Str("dataset", id.String()).Str("owner", owner.Uid.String()).Str("origin", "other").Msg("publish failed")
 			jsonError(w, err.Error(), http.StatusInternalServerError)
 		}
 		return

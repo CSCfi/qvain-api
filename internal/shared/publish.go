@@ -9,6 +9,7 @@ import (
 
 	"github.com/CSCfi/qvain-api/internal/psql"
 	"github.com/CSCfi/qvain-api/pkg/metax"
+	"github.com/CSCfi/qvain-api/pkg/models"
 	"github.com/wvh/uuid"
 )
 
@@ -20,21 +21,10 @@ var (
 // Publish stores a dataset in Metax and updates the Qvain database.
 // It returns the Metax identifier for the dataset, the new version idenifier if such was created, and an error.
 // The error returned can be a Metax ApiError, a Qvain database error, or a basic Go error.
-func Publish(api *metax.MetaxService, db *psql.DB, id uuid.UUID, owner uuid.UUID) (versionId string, newVersionId string, newQVersionId *uuid.UUID, err error) {
-	/*
-		tx, err := db.Begin()
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
+func Publish(api *metax.MetaxService, db *psql.DB, id uuid.UUID, owner *models.User) (versionId string, newVersionId string, newQVersionId *uuid.UUID, err error) {
 
-		if err := db.CheckOwner(id, owner); err := nil {
-			return err
-		}
-	*/
-	dataset, err := db.GetWithOwner(id, owner)
+	dataset, err := db.GetWithOwner(id, owner.Uid)
 	if err != nil {
-		//return err
 		return
 	}
 
@@ -43,7 +33,7 @@ func Publish(api *metax.MetaxService, db *psql.DB, id uuid.UUID, owner uuid.UUID
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	res, err := api.Store(ctx, dataset.Blob())
+	res, err := api.Store(ctx, dataset.Blob(), owner)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "type: %T\n", err)
 		if apiErr, ok := err.(*metax.ApiError); ok {

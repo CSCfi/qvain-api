@@ -214,14 +214,9 @@ func (api *ApiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// use allowed_projects parameter for non-GET requests
 	if r.Method != http.MethodGet {
-		// Add allowed_projects to query as a comma-separated list.
-		// Edit rawQuery directly to avoid query.Encode() escaping commas.
-		userProjects := strings.Join(session.User.Projects, ",")
-		if r.URL.RawQuery != "" {
-			r.URL.RawQuery += "&"
-		}
-		r.URL.RawQuery += "allowed_projects=" + userProjects
+		r.URL.RawQuery = session.User.AddAllowedProjects(r.URL.RawQuery)
 	}
 
 	api.proxy.ServeHTTP(w, r)
