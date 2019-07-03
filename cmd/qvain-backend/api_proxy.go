@@ -86,6 +86,8 @@ func checkProjectIdentifierArray(session *sessions.Session, a []interface{}) boo
 // checking that a Metax response does not contain invalid projects.
 func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) func(*http.Response) error {
 	return func(response *http.Response) error {
+		response.Header = make(http.Header) // clear response headers
+
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			return nil // respond with original error
 		}

@@ -70,6 +70,7 @@ func (rt *DummyRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	recorder.WriteString(responses[query.Get("response")])
 	response := recorder.Result()
 	response.Request = request
+	response.Header.Add("X-Dummy-Header", "remove_me")
 	return response, nil
 }
 
@@ -123,6 +124,11 @@ func tryRequest(t *testing.T, url string, config RequestConfig, expectedStatus i
 	if statusCode != expectedStatus {
 		t.Errorf("%s: expected %d, got %d %s", url, expectedStatus, statusCode, string(body))
 	}
+
+	if dummyHeader := writer.Header().Get("X-Dummy-Header"); dummyHeader != "" {
+		t.Errorf("%s: headers from remote service should be removed", url)
+	}
+
 	return string(body)
 }
 
