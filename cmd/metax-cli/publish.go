@@ -29,11 +29,13 @@ func (s *stringsFlag) Set(val string) error {
 func runPublish(url string, args []string) error {
 	flags := flag.NewFlagSet("publish", flag.ExitOnError)
 	var (
-		ownerUuid uuidflag.Uuid
-		projects  stringsFlag
+		ownerUuid    uuidflag.Uuid
+		projects     stringsFlag
+		userIdentity string
 	)
 	flags.Var(&ownerUuid, "owner", "owner `uuid` to check dataset ownership against")
 	flags.Var(&projects, "projects", "comma-separated list of IDA projects used in the dataset")
+	flags.StringVar(&userIdentity, "identity", "cli-user", "user identity for the user_created and user_modified fields")
 
 	flags.Usage = usageFor(flags, "publish [flags] <id>")
 	if err := flags.Parse(args); err != nil {
@@ -68,6 +70,7 @@ func runPublish(url string, args []string) error {
 	owner := &models.User{
 		Uid:      ownerUuid.Get(),
 		Projects: projects,
+		Identity: userIdentity,
 	}
 	vId, nId, qId, err := shared.Publish(api, db, id, owner)
 	if err != nil {
