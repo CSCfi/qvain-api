@@ -82,6 +82,49 @@ func checkProjectIdentifierArray(session *sessions.Session, a []interface{}) boo
 	return true
 }
 
+// addUserCreatedModifiedToObject adds "user_created" or "user_modified" to the body
+// of a request that contains either:
+// - a json object
+// - an array of json objects
+func addPropertyToRequest(r *http.Request, key string, value string) error {
+	// read body
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	r.Body.Close()
+
+	// parse json
+	var data interface{}
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		return err
+	}
+
+	// set user_created or user_modified for the objects
+	switch data := data.(type) {
+	case map[string]interface{}: // object
+		data[key] = value
+
+	case []interface{}: // array of objects
+		for _, object := range data {
+			if object, isObject := object.(map[string]interface{}); isObject {
+				object[key] = value
+			}
+		}
+	}
+
+	// create new body with the modified data, update ContentLength
+	body, err = json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	r.ContentLength = int64(len(body))
+
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(body)) // make body readable again
+	return nil
+}
+
 // makeModifyResponse makes a callback function to handle the response. This is used for
 // checking that a Metax response does not contain invalid projects.
 func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) func(*http.Response) error {
@@ -219,6 +262,17 @@ func (api *ApiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// use allowed_projects parameter for non-GET requests
 	if r.Method != http.MethodGet {
 		r.URL.RawQuery = session.User.AddAllowedProjects(r.URL.RawQuery)
+
+		// assume new objects are being created if method is POST, so user_created will be used
+		key := "user_created"
+		if r.Method != http.MethodPost {
+			key = "user_modified"
+		}
+
+		if err := addPropertyToRequest(r, key, session.User.Identity); err != nil {
+			jsonError(w, err.Error(), http.StatusForbidden)
+			return
+		}
 	}
 
 	api.proxy.ServeHTTP(w, r)
