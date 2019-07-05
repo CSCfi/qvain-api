@@ -49,7 +49,7 @@ func errorResponse(request *http.Request, msg string, code int) *http.Response {
 	return response
 }
 
-// checkField checks the json request root object contains a property with a specific value. If
+// checkProperty checks the json request root object contains a property with a specific value. If
 // the json object contains an array, each object in the array is checked.
 func checkProperty(r *http.Request, key string, value string) bool {
 	// read body

@@ -65,7 +65,7 @@ func checkProjectIdentifierMap(session *sessions.Session, m map[string]interface
 	return true
 }
 
-// checkProjectIdentifierMap checks project_identifiers in array recursively.
+// checkProjectIdentifierArray checks project_identifiers in array recursively.
 func checkProjectIdentifierArray(session *sessions.Session, a []interface{}) bool {
 	for _, v := range a {
 		switch vv := v.(type) {
@@ -82,10 +82,8 @@ func checkProjectIdentifierArray(session *sessions.Session, a []interface{}) boo
 	return true
 }
 
-// addUserCreatedModifiedToObject adds "user_created" or "user_modified" to the body
-// of a request that contains either:
-// - a json object
-// - an array of json objects
+// addPropertyToRequest adds a propetry to the root object in a json request,
+// or if the root is an array, to each of the objects in the array
 func addPropertyToRequest(r *http.Request, key string, value string) error {
 	// read body
 	body, err := ioutil.ReadAll(r.Body)
@@ -101,7 +99,7 @@ func addPropertyToRequest(r *http.Request, key string, value string) error {
 		return err
 	}
 
-	// set user_created or user_modified for the objects
+	// set the property for the objects
 	switch data := data.(type) {
 	case map[string]interface{}: // object
 		data[key] = value
@@ -270,7 +268,7 @@ func (api *ApiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := addPropertyToRequest(r, key, session.User.Identity); err != nil {
-			jsonError(w, err.Error(), http.StatusForbidden)
+			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
