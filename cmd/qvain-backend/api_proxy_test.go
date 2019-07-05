@@ -58,6 +58,7 @@ func checkProperty(r *http.Request, key string, value string) bool {
 		return false
 	}
 	r.Body.Close()
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(body)) // make body readable again
 
 	// parse json
 	var data interface{}
