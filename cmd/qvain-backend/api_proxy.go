@@ -44,7 +44,7 @@ func recorderToResponse(recorder *httptest.ResponseRecorder, response *http.Resp
 	response.Trailer = result.Trailer
 }
 
-// checkProjectIdentifierMap checks project_identifiers in map recursively.
+// checkProjectIdentifierMap checks project_identifiers in a map recursively.
 func checkProjectIdentifierMap(session *sessions.Session, m map[string]interface{}) bool {
 	for key, v := range m {
 		switch vv := v.(type) {
@@ -65,7 +65,7 @@ func checkProjectIdentifierMap(session *sessions.Session, m map[string]interface
 	return true
 }
 
-// checkProjectIdentifierArray checks project_identifiers in array recursively.
+// checkProjectIdentifierArray checks project_identifiers in an array recursively.
 func checkProjectIdentifierArray(session *sessions.Session, a []interface{}) bool {
 	for _, v := range a {
 		switch vv := v.(type) {
@@ -82,7 +82,7 @@ func checkProjectIdentifierArray(session *sessions.Session, a []interface{}) boo
 	return true
 }
 
-// addPropertyToRequest adds a propetry to the root object in a json request,
+// addPropertyToRequest adds a property to the root object of a json request,
 // or if the root is an array, to each of the objects in the array
 func addPropertyToRequest(r *http.Request, key string, value string) error {
 	// read body
@@ -117,9 +117,8 @@ func addPropertyToRequest(r *http.Request, key string, value string) error {
 	if err != nil {
 		return err
 	}
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 	r.ContentLength = int64(len(body))
-
-	r.Body = ioutil.NopCloser(bytes.NewBuffer(body)) // make body readable again
 	return nil
 }
 
@@ -257,11 +256,11 @@ func (api *ApiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// use allowed_projects parameter for non-GET requests
 	if r.Method != http.MethodGet {
+		// use allowed_projects parameter for non-GET requests
 		r.URL.RawQuery = session.User.AddAllowedProjects(r.URL.RawQuery)
 
-		// assume new objects are being created if method is POST, so user_created will be used
+		// assume new objects are being created if method is POST
 		key := "user_created"
 		if r.Method != http.MethodPost {
 			key = "user_modified"
