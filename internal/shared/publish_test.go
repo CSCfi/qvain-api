@@ -10,6 +10,7 @@ import (
 	"github.com/CSCfi/qvain-api/pkg/metax"
 	"github.com/CSCfi/qvain-api/pkg/models"
 
+	"github.com/tidwall/gjson"
 	"github.com/wvh/uuid"
 )
 
