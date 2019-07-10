@@ -472,10 +472,12 @@ func (tx *Tx) get(id uuid.UUID, key string) (*models.Dataset, error) {
 	res := new(models.Dataset)
 	if key == "" {
 		err = tx.QueryRow("select id, creator, owner, family, schema, published, blob from datasets where id=$1",
-			id.Array()).Scan(res.Id.Array(), res.Creator.Array(), res.Owner.Array(), &family, &schema, &res.Published, &blob)
+			id.Array(),
+		).Scan(res.Id.Array(), res.Creator.Array(), res.Owner.Array(), &family, &schema, &res.Published, &blob)
 	} else {
 		err = tx.QueryRow(`select id, creator, owner, family, schema, published, blob#>$2 from datasets where id=$1`,
-			id.Array(), []string{key}).Scan(res.Id.Array(), res.Creator.Array(), res.Owner.Array(), &family, &schema, &res.Published, &blob)
+			id.Array(), []string{key},
+		).Scan(res.Id.Array(), res.Creator.Array(), res.Owner.Array(), &family, &schema, &res.Published, &blob)
 	}
 	if err != nil {
 		return nil, handleError(err)

@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -28,6 +30,13 @@ var (
 		"9": `{"testing": {"nesting": [ {foo: "bar"}, {"project_identifier": "1"}]}}`, // missing quotes in key
 	}
 
+	requestBodies = map[string]string{
+		"object": `{"identifier":"1", "file_characteristics": {"title":"Whee"}}`,
+		"array": `[{"identifier":"1", "file_characteristics": {"title":"Whee"}},` +
+			`{"identifier":"2", "file_characteristics": {"title":"Whoo"}}]`,
+	}
+
+	userIdentity = "user"
 	userProjects = []string{"1", "2"}
 )
 
@@ -38,6 +47,44 @@ func errorResponse(request *http.Request, msg string, code int) *http.Response {
 	response.StatusCode = code
 	response.Request = request
 	return response
+}
+
+// checkProperty checks that the json request root object contains a property with a specific value. If
+// the json object contains an array, each object in the array is checked.
+func checkProperty(r *http.Request, key string, value string) bool {
+	// read body
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return false
+	}
+	r.Body.Close()
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(body)) // make body readable again
+
+	// parse json
+	var data interface{}
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		return false
+	}
+
+	// check key-value pair
+	switch data := data.(type) {
+	case map[string]interface{}: // object
+		if v, ok := data[key].(string); !ok || v != value {
+			return false
+		}
+
+	case []interface{}: // array of objects
+		for _, object := range data {
+			if object, isObject := object.(map[string]interface{}); isObject {
+				if v, ok := object[key].(string); !ok || v != value {
+					return false
+				}
+			}
+		}
+	}
+
+	return true
 }
 
 // DummyRoundTripper acts as a dummy replacement for the external Metax server.
@@ -83,6 +130,17 @@ func (rt *DummyRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 		}
 	}
 
+	if request.Method != http.MethodGet {
+		field := "user_created"
+		if request.Method != http.MethodPost {
+			field = "user_modified"
+		}
+		if !checkProperty(request, field, userIdentity) {
+			response := errorResponse(request, fmt.Sprintf("missing %s in request", field), http.StatusBadRequest)
+			return response, nil
+		}
+	}
+
 	recorder := httptest.NewRecorder()
 	recorder.WriteString(responses[query.Get("response")])
 	response := recorder.Result()
@@ -102,10 +160,13 @@ func NewDummyProxy(logger zerolog.Logger, sessionsManager *sessions.Manager) *ht
 type RequestConfig struct {
 	NoSession bool
 	Method    string
+	Body      string
 }
 
 // tryRequest creates a request for ApiProxy.ServeHTTP and checks the response
 func tryRequest(t *testing.T, url string, config RequestConfig, expectedStatus int) string {
+	t.Helper() // ignore this function when printing line numbers for errors
+
 	logger := zerolog.Nop() // don't print logs
 	sessionsManager := sessions.NewManager()
 	api := &ApiProxy{
@@ -120,6 +181,7 @@ func tryRequest(t *testing.T, url string, config RequestConfig, expectedStatus i
 		&uuid,
 		&models.User{
 			Projects: userProjects,
+			Identity: userIdentity,
 		},
 	)
 
@@ -128,10 +190,16 @@ func tryRequest(t *testing.T, url string, config RequestConfig, expectedStatus i
 		method = config.Method
 	}
 
-	request, _ := http.NewRequest(method, url, new(bytes.Buffer)) // create request with empty body
+	request, _ := http.NewRequest(method, url, new(bytes.Buffer)) // create request
 	if !config.NoSession {
 		request.Header.Add("Cookie", "sid="+sid) // add session cookie
 	}
+
+	// add body to request
+	if config.Body != "" {
+		request.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(config.Body)))
+	}
+
 	writer := httptest.NewRecorder() // writer will contain the response
 	api.ServeHTTP(writer, request)   // make the request
 
@@ -181,7 +249,21 @@ func TestApiProxy(t *testing.T) {
 	// ok, use PATCH method
 	tryRequest(t,
 		"/files/fakeurl?project=1&response=1",
-		RequestConfig{Method: http.MethodPatch},
+		RequestConfig{Method: http.MethodPatch, Body: requestBodies["object"]},
+		http.StatusOK,
+	)
+
+	// ok, use PATCH method for array
+	tryRequest(t,
+		"/files/fakeurl?project=1&response=1",
+		RequestConfig{Method: http.MethodPatch, Body: requestBodies["array"]},
+		http.StatusOK,
+	)
+
+	// ok, use POST method
+	tryRequest(t,
+		"/files/fakeurl?project=1&response=1",
+		RequestConfig{Method: http.MethodPost, Body: requestBodies["object"]},
 		http.StatusOK,
 	)
 

@@ -10,6 +10,7 @@ import (
 	"github.com/CSCfi/qvain-api/internal/psql"
 	"github.com/CSCfi/qvain-api/pkg/metax"
 	"github.com/CSCfi/qvain-api/pkg/models"
+	"github.com/tidwall/sjson"
 	"github.com/wvh/uuid"
 )
 
@@ -33,12 +34,23 @@ func Publish(api *metax.MetaxService, db *psql.DB, id uuid.UUID, owner *models.U
 		return
 	}
 
+	// Add user_created or user_modified based on whether this was already published
+	blob := dataset.Blob()
+	if dataset.Published {
+		blob, err = sjson.SetBytes(blob, "user_modified", owner.Identity)
+	} else {
+		blob, err = sjson.SetBytes(blob, "user_created", owner.Identity)
+	}
+	if err != nil {
+		return
+	}
+
 	fmt.Fprintln(os.Stderr, "About to publish:", id)
 
 	ctx, cancel := context.WithTimeout(context.Background(), PublishTimeout)
 	defer cancel()
 
-	res, err := api.Store(ctx, dataset.Blob(), owner)
+	res, err := api.Store(ctx, blob, owner)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "type: %T\n", err)
 		if apiErr, ok := err.(*metax.ApiError); ok {
