@@ -257,20 +257,24 @@ func (api *DatasetApi) updateDataset(w http.ResponseWriter, r *http.Request, own
 	api.Created(w, r, typed.Unwrap().Id)
 }
 
+func (api *DatasetApi) handlePublishError(w http.ResponseWriter, ownerId uuid.UUID, id uuid.UUID, err error) {
+	switch t := err.(type) {
+	case *metax.ApiError:
+		api.logger.Warn().Err(err).Str("dataset", id.String()).Str("owner", ownerId.String()).Str("origin", "api").Msg("publish failed")
+		jsonErrorWithPayload(w, t.Error(), "metax", t.OriginalError(), convertExternalStatusCode(t.StatusCode()))
+	case *psql.DatabaseError:
+		api.logger.Error().Err(err).Str("dataset", id.String()).Str("owner", ownerId.String()).Str("origin", "database").Msg("publish failed")
+		dbError(w, err)
+	default:
+		api.logger.Error().Err(err).Str("dataset", id.String()).Str("owner", ownerId.String()).Str("origin", "other").Msg("publish failed")
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func (api *DatasetApi) publishDataset(w http.ResponseWriter, r *http.Request, owner *models.User, id uuid.UUID) {
 	vId, nId, qId, err := shared.Publish(api.metax, api.db, id, owner)
 	if err != nil {
-		switch t := err.(type) {
-		case *metax.ApiError:
-			api.logger.Warn().Err(err).Str("dataset", id.String()).Str("owner", owner.Uid.String()).Str("origin", "api").Msg("publish failed")
-			jsonErrorWithPayload(w, t.Error(), "metax", t.OriginalError(), convertExternalStatusCode(t.StatusCode()))
-		case *psql.DatabaseError:
-			api.logger.Error().Err(err).Str("dataset", id.String()).Str("owner", owner.Uid.String()).Str("origin", "database").Msg("publish failed")
-			dbError(w, err)
-		default:
-			api.logger.Error().Err(err).Str("dataset", id.String()).Str("owner", owner.Uid.String()).Str("origin", "other").Msg("publish failed")
-			jsonError(w, err.Error(), http.StatusInternalServerError)
-		}
+		api.handlePublishError(w, owner.Uid, id, err)
 		return
 	}
 
@@ -278,10 +282,22 @@ func (api *DatasetApi) publishDataset(w http.ResponseWriter, r *http.Request, ow
 }
 
 func (api *DatasetApi) deleteDataset(w http.ResponseWriter, r *http.Request, owner uuid.UUID, id uuid.UUID) {
-	err := api.db.Delete(id, &owner)
-	if err != nil {
-		dbError(w, err)
+	dataset, err := api.db.GetWithOwner(id, owner)
+	if dbError(w, err) {
 		return
+	}
+
+	if dataset.Published {
+		err := shared.UnpublishAndDelete(api.metax, api.db, id, owner)
+		if err != nil {
+			api.handlePublishError(w, owner, id, err)
+			return
+		}
+	} else {
+		err = api.db.Delete(id, &owner)
+		if err != nil {
+			dbError(w, err)
+		}
 	}
 
 	// deleted, return 204 No Content

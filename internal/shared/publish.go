@@ -14,6 +14,11 @@ import (
 	"github.com/wvh/uuid"
 )
 
+const (
+	// PublishTimeout is how long we wait for response when publishling or unpublishing
+	PublishTimeout = 10 * time.Second
+)
+
 var (
 	// ErrNoIdentifier means we can't find the Metax dataset identifier in created or updated datasets.
 	ErrNoIdentifier = errors.New("no identifier in dataset")
@@ -42,7 +47,7 @@ func Publish(api *metax.MetaxService, db *psql.DB, id uuid.UUID, owner *models.U
 
 	fmt.Fprintln(os.Stderr, "About to publish:", id)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), PublishTimeout)
 	defer cancel()
 
 	res, err := api.Store(ctx, blob, owner)
@@ -116,4 +121,32 @@ func Publish(api *metax.MetaxService, db *psql.DB, id uuid.UUID, owner *models.U
 
 	fmt.Fprintln(os.Stderr, "success")
 	return
+}
+
+// UnpublishAndDelete marks a dataset as removed in Metax and deletes it from the Qvain db.
+// The dataset will no longer be visible in Metax queries unless the ?removed=true parameter is used.
+func UnpublishAndDelete(api *metax.MetaxService, db *psql.DB, id uuid.UUID, owner uuid.UUID) error {
+	dataset, err := db.GetWithOwner(id, owner)
+	if err != nil {
+		return err
+	}
+
+	// mark as removed in Metax
+	ctx, cancel := context.WithTimeout(context.Background(), PublishTimeout)
+	defer cancel()
+	if err := api.Delete(ctx, dataset.Blob()); err != nil {
+		fmt.Fprintf(os.Stderr, "type: %T\n", err)
+		if apiErr, ok := err.(*metax.ApiError); ok {
+			fmt.Fprintf(os.Stderr, "metax error: [%d] %s\n", apiErr.StatusCode(), apiErr.OriginalError())
+		}
+		return err
+	}
+
+	// delete from db
+	err = db.Delete(id, &owner)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

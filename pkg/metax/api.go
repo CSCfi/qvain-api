@@ -1,27 +1,17 @@
 // Package metax provides a client for the CSC MetaX API.
 package metax
 
-/*
- *	links:
- *	https://metax-test.csc.fi
- *	https://metax-test.csc.fi/rest/datasets/pid:urn:cr3
- *  https://metax-test.csc.fi/rest/datasets/?owner_id=053bffbcc41edad4853bea91fc42ea18
- */
-
 import (
 	"crypto/tls"
 	"fmt"
 
-	//"log"
-	"time"
-	//"runtime"
 	"encoding/json"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"time"
 
-	//"net/url"
 	"bytes"
 	"context"
 	"errors"
@@ -31,7 +21,6 @@ import (
 
 	"github.com/CSCfi/qvain-api/pkg/models"
 	"github.com/rs/zerolog"
-	//"github.com/rs/zerolog/log"
 )
 
 const (
@@ -643,14 +632,79 @@ func (api *MetaxService) Store(ctx context.Context, blob json.RawMessage, owner 
 	return nil, nil
 }
 
+// Delete marks a dataset as removed in Metax.
+func (api *MetaxService) Delete(ctx context.Context, blob json.RawMessage) error {
+	if blob == nil || len(blob) < 1 {
+		return errEmptyDataset
+	}
+
+	id := GetIdentifier(blob)
+
+	req, err := http.NewRequest(http.MethodDelete, api.UrlForId(id), nil)
+	if err != nil {
+		return err
+	}
+
+	api.writeApiHeaders(req)
+
+	start := time.Now()
+	defer func() {
+		api.logger.Printf("metax: delete processed in %v", time.Since(start))
+	}()
+
+	res, err := api.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+
+	defer res.Body.Close()
+	var body []byte
+	body, _ = ioutil.ReadAll(res.Body)
+
+	switch res.StatusCode {
+	case 204:
+		api.logger.Printf("removed dataset %s", id)
+	case 400:
+		return &ApiError{"invalid dataset", body, res.StatusCode}
+	case 401:
+		return &ApiError{"authorisation required", body, res.StatusCode}
+	case 403:
+		return &ApiError{"forbidden", body, res.StatusCode}
+	case 404:
+		return &ApiError{"not found", body, res.StatusCode}
+	default:
+		return &ApiError{"API returned error", body, res.StatusCode}
+	}
+
+	return nil
+}
+
+// GetId queries the dataset endpoint for a dataset with the given id.
+func (api *MetaxService) GetIdRemoved(id string) (json.RawMessage, error) {
+	return api.getDataset(id, true)
+}
+
 // GetId queries the dataset endpoint for a dataset with the given id.
 func (api *MetaxService) GetId(id string) (json.RawMessage, error) {
+	return api.getDataset(id, false)
+}
+
+// GetId queries the dataset endpoint for a dataset with the given id. If removed
+// is true, query for removed datasets.
+func (api *MetaxService) getDataset(id string, removed bool) (json.RawMessage, error) {
 	req, err := http.NewRequest("GET", api.UrlForId(id), nil)
 	if err != nil {
 		return nil, err
 	}
-	api.writeApiHeaders(req)
 
+	// query for a removed dataset
+	if removed {
+		query := req.URL.Query()
+		query.Add("removed", "true")
+		req.URL.RawQuery = query.Encode()
+	}
+
+	api.writeApiHeaders(req)
 	api.logger.Printf("request headers: %+v\n", req)
 	res, err := api.client.Do(req)
 	if err != nil {
@@ -679,38 +733,3 @@ func (api *MetaxService) GetId(id string) (json.RawMessage, error) {
 
 	return body, nil
 }
-
-/*
-func (api *MetaxService) ParseRecord(txt string) (*MetaxRecord, error) {
-	rec := new(MetaxRecord)
-	err := json.Unmarshal([]byte(txt), &rec)
-	if err != nil {
-		return &MetaxRecord{}, err
-	}
-	return rec, nil
-}
-
-func (api *MetaxService) ParseRootKeys(txt string) ([]string, error) {
-	var top map[string]interface{}
-	//make(map[string]interface{})
-	var keys []string
-
-	err := json.Unmarshal([]byte(txt), &top)
-	if err != nil {
-		return []string{}, err
-	}
-	for k := range top {
-		keys = append(keys, k)
-	}
-	return keys, nil
-}
-
-func (api *MetaxService) ParseList(txt string) (*PaginatedResponse, error) {
-	list := new(PaginatedResponse)
-	err := json.Unmarshal([]byte(txt), &list)
-	if err != nil {
-		return &PaginatedResponse{}, err
-	}
-	return list, nil
-}
-*/

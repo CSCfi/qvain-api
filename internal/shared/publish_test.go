@@ -11,6 +11,7 @@ import (
 	"github.com/CSCfi/qvain-api/pkg/models"
 	"github.com/tidwall/gjson"
 
+	"github.com/tidwall/gjson"
 	"github.com/wvh/uuid"
 )
 
@@ -252,6 +253,44 @@ func TestPublish(t *testing.T) {
 			if userCreated := gjson.GetBytes(publishedDataset.Blob(), "user_created").String(); userCreated != modifier.Identity {
 				t.Error("missing or wrong user_created: ", userCreated)
 			}
+		})
+
+		// test that should unpublish and delete
+		t.Run(test.fn+"(new)", func(t *testing.T) {
+
+			dataset, err := db.GetWithOwner(id, owner.Uid)
+			if err != nil {
+				t.Error("error:", err)
+			}
+			identifier := metax.GetIdentifier(dataset.Blob())
+
+			err = UnpublishAndDelete(api, db, id, owner.Uid)
+			if err != nil {
+				if apiErr, ok := err.(*metax.ApiError); ok {
+					t.Errorf("API error: [%d] %s", apiErr.StatusCode(), apiErr.Error())
+				}
+				t.Error("error:", err)
+			}
+
+			// retrieve the deleted dataset from Metax
+			removedDataset, err := api.GetIdRemoved(identifier)
+			if err != nil {
+				t.Error("error:", err)
+				return
+			}
+
+			if removed := gjson.GetBytes(removedDataset, "removed").Bool(); !removed {
+				t.Errorf("dataset was not removed from Metax")
+				return
+			}
+
+			// try to retrieve the deleted dataset from Qvain db
+			_, err = db.GetWithOwner(id, owner.Uid)
+			if err == nil {
+				t.Errorf("dataset was not deleted from Qvain")
+			}
+
+			t.Logf("unpublished and removed dataset %s", id)
 		})
 
 		// if we want to make it invalid again...
