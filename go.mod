@@ -9,6 +9,8 @@ require (
 	github.com/fernet/fernet-go v0.0.0-20180830025343-9eac43b88a5e
 	github.com/francoispqt/gojay v1.2.10
 	github.com/gomodule/redigo v2.0.0+incompatible
+	github.com/google/pprof v0.0.0-20190515194954-54271f7e092f // indirect
+	github.com/ianlancetaylor/demangle v0.0.0-20181102032728-5e5cf60278f6 // indirect
 	github.com/jackc/pgx v3.4.0+incompatible
 	github.com/json-iterator/go v1.1.6
 	github.com/kr/pty v1.1.5 // indirect
@@ -28,6 +30,7 @@ require (
 	github.com/valyala/fastjson v1.4.1
 	github.com/wvh/sourcelink v0.0.0-20180329151122-13c149cfaa37 // indirect
 	github.com/wvh/uuid v0.0.0-20180305145759-746bc10d0c6f
+	golang.org/x/arch v0.0.0-20190312162104-788fe5ffcd8c // indirect
 	golang.org/x/crypto v0.0.0-20190618222545-ea8f1a30c443 // indirect
 	golang.org/x/lint v0.0.0-20190409202823-959b441ac422 // indirect
 	golang.org/x/mod v0.1.0 // indirect

@@ -113,6 +113,7 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 		FROM (
 			SELECT id, created, modified, seq, synced, published,
 				family AS type, schema, blob AS dataset,
+				blob#>'{identifier}' identifier,
 				(SELECT extids->$2 FROM identities WHERE uid = creator) AS creator,
 				(SELECT extids->$2 FROM identities WHERE uid = owner) AS owner
 			FROM datasets
@@ -124,6 +125,7 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 		FROM (
 			SELECT id, created, modified, seq, synced, published,
 				family AS type, schema, blob#>$2 AS dataset,
+				blob#>'{identifier}' identifier,
 				(SELECT extids->$3 FROM identities WHERE uid = creator) AS creator,
 				(SELECT extids->$3 FROM identities WHERE uid = owner) AS owner
 			FROM datasets
