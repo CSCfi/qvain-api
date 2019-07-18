@@ -2,18 +2,23 @@ package shared
 
 import (
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/CSCfi/qvain-api/internal/psql"
+	"github.com/CSCfi/qvain-api/pkg/env"
 	"github.com/CSCfi/qvain-api/pkg/metax"
 	"github.com/CSCfi/qvain-api/pkg/models"
+	"github.com/tidwall/gjson"
 
 	"github.com/wvh/uuid"
 )
 
-var owner = uuid.MustFromString("053bffbcc41edad4853bea91fc42ea18")
+var (
+	ownerUuid        = uuid.MustFromString("053bffbcc41edad4853bea91fc42ea18")
+	ownerIdentity    = "owner"
+	modifierIdentity = "modifier"
+)
 
 func readFile(tb testing.TB, fn string) []byte {
 	path := filepath.Join("..", "..", "pkg", "metax", "testdata", fn)
@@ -85,12 +90,40 @@ func TestPublish(t *testing.T) {
 		t.Fatal("psql:", err)
 	}
 
-	api := metax.NewMetaxService(os.Getenv("APP_METAX_API_HOST"), metax.WithCredentials(os.Getenv("APP_METAX_API_USER"), os.Getenv("APP_METAX_API_PASS")))
+	api := metax.NewMetaxService(
+		env.Get("APP_METAX_API_HOST"),
+		metax.WithCredentials(env.Get("APP_METAX_API_USER"), env.Get("APP_METAX_API_PASS")),
+		metax.WithInsecureCertificates(env.GetBool("APP_DEV_MODE")),
+	)
+
+	owner := &models.User{
+		Uid:      ownerUuid,
+		Identity: ownerIdentity,
+		Projects: []string{"project_x"},
+	}
+
+	modifier := &models.User{
+		Uid:      ownerUuid,
+		Identity: modifierIdentity,
+		Projects: []string{"project_x"},
+	}
+
+	wrongProjectOwner := &models.User{
+		Uid:      ownerUuid,
+		Identity: ownerIdentity,
+		Projects: []string{"wrong_project_x_y_z"},
+	}
+
+	noProjectOwner := &models.User{
+		Uid:      ownerUuid,
+		Identity: ownerIdentity,
+		Projects: []string{},
+	}
 
 	for _, test := range tests {
 		blob := readFile(t, test.fn)
 
-		dataset, err := models.NewDataset(owner)
+		dataset, err := models.NewDataset(owner.Uid)
 		if err != nil {
 			t.Fatal("models.NewDataset():", err)
 		}
@@ -106,6 +139,22 @@ func TestPublish(t *testing.T) {
 
 		var versionId string
 
+		// tests that should fail with *metax.ApiError 403 due to project permissions
+		t.Run(test.fn+"(wrong project)", func(t *testing.T) {
+			_, _, _, err := Publish(api, db, id, wrongProjectOwner)
+			if apiErr, ok := err.(*metax.ApiError); !ok || apiErr.StatusCode() != 403 {
+				t.Error("error: wrongProjectOwner should have failed with 403")
+			}
+		})
+
+		t.Run(test.fn+"(no project)", func(t *testing.T) {
+			_, _, _, err := Publish(api, db, id, noProjectOwner)
+			if apiErr, ok := err.(*metax.ApiError); !ok || apiErr.StatusCode() != 403 {
+				t.Error("error: noProjectOwner should have failed with 403")
+			}
+		})
+
+		// test that should publish succesfully
 		t.Run(test.fn+"(new)", func(t *testing.T) {
 			vId, nId, _, err := Publish(api, db, id, owner)
 			if err != nil {
@@ -121,6 +170,15 @@ func TestPublish(t *testing.T) {
 
 			t.Logf("published with version id %q", vId)
 			versionId = vId
+
+			// check that the dataset has been updated with a user_created field
+			publishedDataset, err := db.Get(id)
+			if err != nil {
+				t.Error("error retrieving dataset:", err)
+			}
+			if userCreated := gjson.GetBytes(publishedDataset.Blob(), "user_created").String(); userCreated != owner.Identity {
+				t.Error("missing or wrong user_created", userCreated)
+			}
 		})
 
 		err = modifyTitleFromDataset(db, id, "Less Wonderful Title")
@@ -128,8 +186,9 @@ func TestPublish(t *testing.T) {
 			t.Fatal("modifyTitleFromDataset():", err)
 		}
 
+		// test that should update
 		t.Run(test.fn+"(update)", func(t *testing.T) {
-			vId, nId, _, err := Publish(api, db, id, owner)
+			vId, nId, _, err := Publish(api, db, id, modifier)
 			if err != nil {
 				if apiErr, ok := err.(*metax.ApiError); ok {
 					t.Errorf("API error: [%d] %s", apiErr.StatusCode(), apiErr.Error())
@@ -146,6 +205,16 @@ func TestPublish(t *testing.T) {
 			}
 
 			t.Logf("(re)published with version id %q", vId)
+
+			// check that the dataset has been updated with a user_modified field
+			publishedDataset, err := db.Get(id)
+			if err != nil {
+				t.Error("error retrieving dataset:", err)
+			}
+
+			if userModified := gjson.GetBytes(publishedDataset.Blob(), "user_modified").String(); userModified != modifier.Identity {
+				t.Error("missing or wrong user_modified:", userModified)
+			}
 		})
 
 		err = deleteFilesFromFairdataDataset(db, id)
@@ -153,8 +222,9 @@ func TestPublish(t *testing.T) {
 			t.Fatal("deleteFilesFromFairdataDataset():", err)
 		}
 
+		// test that should remove files and create a new version
 		t.Run(test.fn+"(files)", func(t *testing.T) {
-			vId, nId, qId, err := Publish(api, db, id, owner)
+			vId, nId, qId, err := Publish(api, db, id, modifier)
 			if err != nil {
 				if apiErr, ok := err.(*metax.ApiError); ok {
 					t.Errorf("API error: [%d] %s", apiErr.StatusCode(), apiErr.Error())
@@ -173,6 +243,53 @@ func TestPublish(t *testing.T) {
 			}
 
 			t.Logf("(re)published with version id %q", vId)
+
+			// the new version should have the user who modified the dataset as user_created
+			publishedDataset, err := db.Get(*qId)
+			if err != nil {
+				t.Error("error retrieving dataset:", err)
+			}
+			if userCreated := gjson.GetBytes(publishedDataset.Blob(), "user_created").String(); userCreated != modifier.Identity {
+				t.Error("missing or wrong user_created: ", userCreated)
+			}
+		})
+
+		// test that should unpublish and delete
+		t.Run(test.fn+"(new)", func(t *testing.T) {
+
+			dataset, err := db.GetWithOwner(id, owner.Uid)
+			if err != nil {
+				t.Error("error:", err)
+			}
+			identifier := metax.GetIdentifier(dataset.Blob())
+
+			err = UnpublishAndDelete(api, db, id, owner.Uid)
+			if err != nil {
+				if apiErr, ok := err.(*metax.ApiError); ok {
+					t.Errorf("API error: [%d] %s", apiErr.StatusCode(), apiErr.Error())
+				}
+				t.Error("error:", err)
+			}
+
+			// retrieve the deleted dataset from Metax
+			removedDataset, err := api.GetIdRemoved(identifier)
+			if err != nil {
+				t.Error("error:", err)
+				return
+			}
+
+			if removed := gjson.GetBytes(removedDataset, "removed").Bool(); !removed {
+				t.Errorf("dataset was not removed from Metax")
+				return
+			}
+
+			// try to retrieve the deleted dataset from Qvain db
+			_, err = db.GetWithOwner(id, owner.Uid)
+			if err == nil {
+				t.Errorf("dataset was not deleted from Qvain")
+			}
+
+			t.Logf("unpublished and removed dataset %s", id)
 		})
 
 		// if we want to make it invalid again...

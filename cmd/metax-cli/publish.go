@@ -4,22 +4,40 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/CSCfi/qvain-api/internal/psql"
 	"github.com/CSCfi/qvain-api/internal/shared"
+	"github.com/CSCfi/qvain-api/pkg/env"
 	"github.com/CSCfi/qvain-api/pkg/metax"
+	"github.com/CSCfi/qvain-api/pkg/models"
 	"github.com/wvh/uuid"
-	"github.com/wvh/uuid/flag"
+	uuidflag "github.com/wvh/uuid/flag"
 )
+
+type stringsFlag []string
+
+func (s *stringsFlag) String() string {
+	return ""
+}
+
+func (s *stringsFlag) Set(val string) error {
+	*s = append(*s, strings.Split(val, ",")...)
+	return nil
+}
 
 func runPublish(url string, args []string) error {
 	flags := flag.NewFlagSet("publish", flag.ExitOnError)
 	var (
-		owner uuidflag.Uuid
+		ownerUuid    uuidflag.Uuid
+		projects     stringsFlag
+		userIdentity string
 	)
-	flags.Var(&owner, "owner", "owner `uuid` to check dataset ownership against")
+	flags.Var(&ownerUuid, "owner", "owner `uuid` to check dataset ownership against")
+	flags.Var(&projects, "projects", "comma-separated list of IDA projects used in the dataset")
+	flags.StringVar(&userIdentity, "identity", "cli-user", "user identity for the user_created and user_modified fields")
 
-	flags.Usage = usageFor(flags, "create [flags] <id>")
+	flags.Usage = usageFor(flags, "publish [flags] <id>")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -34,8 +52,8 @@ func runPublish(url string, args []string) error {
 		return err
 	}
 
-	if owner.IsSet() {
-		fmt.Println("User:", owner)
+	if ownerUuid.IsSet() {
+		fmt.Println("User:", ownerUuid)
 	}
 
 	db, err := psql.NewPoolServiceFromEnv()
@@ -43,9 +61,18 @@ func runPublish(url string, args []string) error {
 		return err
 	}
 
-	api := metax.NewMetaxService(os.Getenv("APP_METAX_API_HOST"), metax.WithCredentials(os.Getenv("APP_METAX_API_USER"), os.Getenv("APP_METAX_API_PASS")))
+	api := metax.NewMetaxService(
+		os.Getenv("APP_METAX_API_HOST"),
+		metax.WithCredentials(os.Getenv("APP_METAX_API_USER"), os.Getenv("APP_METAX_API_PASS")),
+		metax.WithInsecureCertificates(env.GetBool("APP_DEV_MODE")),
+	)
 
-	vId, nId, qId, err := shared.Publish(api, db, id, owner.Get())
+	owner := &models.User{
+		Uid:      ownerUuid.Get(),
+		Projects: projects,
+		Identity: userIdentity,
+	}
+	vId, nId, qId, err := shared.Publish(api, db, id, owner)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "type: %T\n", err)
 		if apiErr, ok := err.(*metax.ApiError); ok {

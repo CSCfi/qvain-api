@@ -1,6 +1,8 @@
 package models
 
 import (
+	"strings"
+
 	"github.com/francoispqt/gojay"
 	"github.com/wvh/uuid"
 )
@@ -110,4 +112,15 @@ func UserFromJson(b []byte) (u *User, err error) {
 	u = new(User)
 	err = gojay.UnmarshalJSONObject(b, u)
 	return
+}
+
+// AddAllowedProjects adds user projects to a query string as a comma-separated allowed_projects parameter.
+// The raw query string is used directly instead of using query.Encode() to avoid escaping commas.
+func (user *User) AddAllowedProjects(rawQuery string) string {
+	userProjects := strings.Join(user.Projects, ",")
+	if rawQuery != "" {
+		rawQuery += "&"
+	}
+	rawQuery += "allowed_projects=" + userProjects
+	return rawQuery
 }

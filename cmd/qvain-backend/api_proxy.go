@@ -44,7 +44,7 @@ func recorderToResponse(recorder *httptest.ResponseRecorder, response *http.Resp
 	response.Trailer = result.Trailer
 }
 
-// checkProjectIdentifierMap checks project_identifiers in map recursively.
+// checkProjectIdentifierMap checks project_identifiers in a map recursively.
 func checkProjectIdentifierMap(session *sessions.Session, m map[string]interface{}) bool {
 	for key, v := range m {
 		switch vv := v.(type) {
@@ -65,7 +65,7 @@ func checkProjectIdentifierMap(session *sessions.Session, m map[string]interface
 	return true
 }
 
-// checkProjectIdentifierMap checks project_identifiers in array recursively.
+// checkProjectIdentifierArray checks project_identifiers in an array recursively.
 func checkProjectIdentifierArray(session *sessions.Session, a []interface{}) bool {
 	for _, v := range a {
 		switch vv := v.(type) {
@@ -82,10 +82,52 @@ func checkProjectIdentifierArray(session *sessions.Session, a []interface{}) boo
 	return true
 }
 
+// addPropertyToRequest adds a property to the root object of a json request,
+// or if the root is an array, to each of the objects in the array
+func addPropertyToRequest(r *http.Request, key string, value string) error {
+	// read body
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	r.Body.Close()
+
+	// parse json
+	var data interface{}
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		return err
+	}
+
+	// set the property for the objects
+	switch data := data.(type) {
+	case map[string]interface{}: // object
+		data[key] = value
+
+	case []interface{}: // array of objects
+		for _, object := range data {
+			if object, isObject := object.(map[string]interface{}); isObject {
+				object[key] = value
+			}
+		}
+	}
+
+	// create new body with the modified data, update ContentLength
+	body, err = json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+	r.ContentLength = int64(len(body))
+	return nil
+}
+
 // makeModifyResponse makes a callback function to handle the response. This is used for
 // checking that a Metax response does not contain invalid projects.
 func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) func(*http.Response) error {
 	return func(response *http.Response) error {
+		response.Header = make(http.Header) // clear response headers
+
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			return nil // respond with original error
 		}
@@ -215,13 +257,19 @@ func (api *ApiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodGet {
-		// Add allowed_projects to query as a comma-separated list.
-		// Edit rawQuery directly to avoid query.Encode() escaping commas.
-		userProjects := strings.Join(session.User.Projects, ",")
-		if r.URL.RawQuery != "" {
-			r.URL.RawQuery += "&"
+		// use allowed_projects parameter for non-GET requests
+		r.URL.RawQuery = session.User.AddAllowedProjects(r.URL.RawQuery)
+
+		// assume new objects are being created if method is POST
+		key := "user_created"
+		if r.Method != http.MethodPost {
+			key = "user_modified"
 		}
-		r.URL.RawQuery += "allowed_projects=" + userProjects
+
+		if err := addPropertyToRequest(r, key, session.User.Identity); err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	api.proxy.ServeHTTP(w, r)

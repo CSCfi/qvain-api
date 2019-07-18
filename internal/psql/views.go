@@ -19,7 +19,7 @@ func (db *DB) ViewDatasetsByOwner(owner uuid.UUID) (json.RawMessage, error) {
 	err := db.pool.QueryRow(`
 		SELECT json_agg(result) "by_owner"
 		FROM (
-			SELECT id, owner, created, modified, seq, published,
+			SELECT id, owner, created, modified, synced, seq, published,
 				blob#>'{identifier}' identifier,
 				blob#>'{research_dataset,title}' title,
 				blob#>'{research_dataset,description}' description,
@@ -113,6 +113,7 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 		FROM (
 			SELECT id, created, modified, seq, synced, published,
 				family AS type, schema, blob AS dataset,
+				blob#>'{identifier}' identifier,
 				(SELECT extids->$2 FROM identities WHERE uid = creator) AS creator,
 				(SELECT extids->$2 FROM identities WHERE uid = owner) AS owner
 			FROM datasets
@@ -124,6 +125,7 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 		FROM (
 			SELECT id, created, modified, seq, synced, published,
 				family AS type, schema, blob#>$2 AS dataset,
+				blob#>'{identifier}' identifier,
 				(SELECT extids->$3 FROM identities WHERE uid = creator) AS creator,
 				(SELECT extids->$3 FROM identities WHERE uid = owner) AS owner
 			FROM datasets
