@@ -19,15 +19,16 @@ import (
 
 var (
 	responses = map[string]string{
-		"1": `{"project_identifier": "1"}`,
-		"2": `{"results": [{"project_identifier": "1"}, {"project_identifier": "2"}]}`,
-		"3": `{"project_identifier": "3"}`,
-		"4": `{"results": [{"project_identifier": "1"}, {"project_identifier": "4"}]}`,
-		"5": `{project_identifier: "1"}`, // invalid json; missing quotes in key
-		"6": `{"directories": [{"project_identifier": "1"}, {"project_identifier": "4"}]}`,
-		"7": `{"testing": {"nesting": [ {"foo": "bar"}, {"project_identifier": "5"}]}}`,
-		"8": `{"testing": {"nesting": [ {"foo": "bar"}, {"project_identifier": "1"}]}}`,
-		"9": `{"testing": {"nesting": [ {foo: "bar"}, {"project_identifier": "1"}]}}`, // missing quotes in key
+		"1":  `{"project_identifier": "1"}`,
+		"2":  `{"results": [{"project_identifier": "1"}, {"project_identifier": "2"}]}`,
+		"3":  `{"project_identifier": "3"}`,
+		"4":  `{"results": [{"project_identifier": "1"}, {"project_identifier": "4"}]}`,
+		"5":  `{project_identifier: "1"}`, // invalid json; missing quotes in key
+		"6":  `{"directories": [{"project_identifier": "1"}, {"project_identifier": "4"}]}`,
+		"7":  `{"testing": {"nesting": [ {"foo": "bar"}, {"project_identifier": "5"}]}}`,
+		"8":  `{"testing": {"nesting": [ {"foo": "bar"}, {"project_identifier": "1"}]}}`,
+		"9":  `{"testing": {"nesting": [ {foo: "bar"}, {"project_identifier": "1"}]}}`, // missing quotes in key
+		"10": `[{"project_identifier": "1"}, {"project_identifier": "2"}]`,             // array response
 	}
 
 	requestBodies = map[string]string{
@@ -242,6 +243,13 @@ func TestApiProxy(t *testing.T) {
 	// ok, no project specified, return result object array
 	tryRequest(t,
 		"/directories/fakeurl?response=2",
+		RequestConfig{},
+		http.StatusOK,
+	)
+
+	// ok, no project specified, return array
+	tryRequest(t,
+		"/directories/fakeurl?response=10",
 		RequestConfig{},
 		http.StatusOK,
 	)
