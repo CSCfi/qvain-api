@@ -32,7 +32,7 @@ func makeMux(config *Config) *http.ServeMux {
 		"https://"+config.Hostname+"/api/auth/cb",
 		//"https://qvain-test.csc.fi/api/auth/cb",
 		config.oidcProviderUrl,
-		"/token",
+		"/login",
 	)
 	if err != nil {
 		oidcLogger.Error().Err(err).Msg("oidc configuration failed")
