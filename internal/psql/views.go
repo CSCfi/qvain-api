@@ -26,6 +26,7 @@ func (db *DB) ViewDatasetsByOwner(owner uuid.UUID) (json.RawMessage, error) {
 				blob#>'{preservation_state}' preservation_state,
 				blob#>'{previous_dataset_version,identifier}' previous,
 				blob#>'{next_dataset_version,identifier}' "next",
+				blob#>'{deprecated}' deprecated,
 				jsonb_array_length(coalesce(blob#>'{dataset_version_set}', '[]')) versions
 			FROM datasets
 			WHERE owner = $1
@@ -115,6 +116,7 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 				family AS type, schema, blob AS dataset,
 				blob#>'{identifier}' identifier,
 				blob#>'{next_dataset_version,identifier}' "next",
+				blob#>'{deprecated}' deprecated,
 				(SELECT extids->$2 FROM identities WHERE uid = creator) AS creator,
 				(SELECT extids->$2 FROM identities WHERE uid = owner) AS owner
 			FROM datasets
@@ -128,6 +130,7 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 				family AS type, schema, blob#>$2 AS dataset,
 				blob#>'{identifier}' identifier,
 				blob#>'{next_dataset_version,identifier}' "next",
+				blob#>'{deprecated}' deprecated,
 				(SELECT extids->$3 FROM identities WHERE uid = creator) AS creator,
 				(SELECT extids->$3 FROM identities WHERE uid = owner) AS owner
 			FROM datasets
