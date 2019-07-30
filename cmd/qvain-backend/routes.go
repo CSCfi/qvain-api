@@ -30,27 +30,17 @@ func makeMux(config *Config) *http.ServeMux {
 		config.oidcClientID,
 		config.oidcClientSecret,
 		"https://"+config.Hostname+"/api/auth/cb",
-		//"https://qvain-test.csc.fi/api/auth/cb",
 		config.oidcProviderUrl,
-		"/token",
+		"/login",
 	)
 	if err != nil {
 		oidcLogger.Error().Err(err).Msg("oidc configuration failed")
 	} else {
 		oidcClient.SetLogger(oidcLogger)
-		//oidcClient.OnLogin = MakeSessionHandlerForExternalService(config.sessions, config.db, config.Logger, "fd")
 		oidcClient.OnLogin = MakeSessionHandlerForFairdata(config.sessions, config.db, nil, config.Logger, "fd")
 		mux.HandleFunc("/api/auth/login", oidcClient.Auth())
 		mux.HandleFunc("/api/auth/cb", oidcClient.Callback())
 	}
-
-	// dataset endpoints
-	//datasetApi := NewDatasetApi(config.db, config.sessions, config.NewLogger("dataset"))
-	//mux.Handle("/api/dataset/", datasetApi)
-
-	// views
-	//viewApi := &ViewApi{db: config.db, logger: config.NewLogger("views")}
-	//mux.HandleFunc("/api/views/byowner", viewApi.ByOwner())
 
 	return mux
 }

@@ -39,7 +39,7 @@ func NewAuthApi(config *Config, onLogin loginHook, logger zerolog.Logger) *AuthA
 		config.oidcClientSecret,
 		"https://"+config.Hostname+"/api/auth/cb",
 		config.oidcProviderUrl,
-		"/token",
+		"/login",
 		oidc.WithAllowDevLogin(config.DevMode),
 		oidc.WithSkipExpiryCheck(config.DevMode),
 	)
