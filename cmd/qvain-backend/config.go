@@ -148,16 +148,6 @@ func getHostname() (string, error) {
 	return "", err
 }
 
-// getScheme sets the URL scheme used for links and redirects.
-// It is used to enforce non-SSL links for local development where we don't have certificates.
-func getScheme() string {
-	if env.GetBool("APP_FORCE_HTTP_SCHEME") {
-		return "http://"
-	}
-
-	return "https://"
-}
-
 // getTokenKey gets the token secret in hex from the environment and decodes it.
 func getTokenKey() ([]byte, error) {
 	encoded := env.Get("APP_TOKEN_KEY")

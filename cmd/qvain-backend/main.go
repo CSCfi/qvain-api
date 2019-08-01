@@ -93,17 +93,8 @@ func main() {
 		logger.Error().Err(err).Msg("secure messaging service initialisation failed")
 	}
 
-	// set up default handlers
-	mux := makeMux(config)
-	var handler http.Handler = mux
-	_ = handler
-
-	apis := NewApis(config)
-	_ = apis
-
 	// default server, without TLSConfig
 	srv := &http.Server{
-		//Handler:           authMux,
 		Handler:           Root(config),
 		ReadTimeout:       HttpReadTimeout,
 		ReadHeaderTimeout: HttpReadTimeout,
