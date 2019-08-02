@@ -13,38 +13,10 @@ import (
 	"github.com/wvh/uuid"
 )
 
-// apiWriteHeaders points to a function writing either cors or no cors api responses.
-var apiWriteHeaders = apiWriteHeadersNoCors
-
-// enableCors sets api helper functions to CORS enabled versions.
-// It is not safe to call this function after starting the HTTP server.
-func enableCORS() {
-	apiWriteHeaders = apiWriteHeadersCorsAllowAll
-}
-
-// apiWriteHeadersNoCors writes standard header fields for all JSON api responses.
-func apiWriteHeadersNoCors(w http.ResponseWriter) {
+// apiWriteHeaders writes standard header fields for all JSON api responses.
+func apiWriteHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-}
-
-// apiWriteHeadersCorsAllowAll writes standard headers fields, allowing CORS from anywhere.
-func apiWriteHeadersCorsAllowAll(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Add("Vary", "Origin")
-}
-
-// apiWriteHeadersWithCache adds a caching header to the default api headers and writes them to the response.
-//
-// CC header values expressed in seconds:
-//   3600 (1h), 2592000 (30d), 31536000 (365d)
-// Example header:
-//   Cache-Control: public, max-age=31536000
-func apiWriteHeadersWithCache(w http.ResponseWriter, cc uint) {
-	apiWriteHeaders(w)
-	w.Header().Set("Cache-Control", "max-age=2592000") // 30d
 }
 
 // apiWriteOptions is a convenience function to add an OPTIONS response to API endpoints.

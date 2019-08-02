@@ -48,7 +48,7 @@ type Config struct {
 	messenger *secmsg.MessageService
 }
 
-// ConfigFromEnv() creates the application configuration by reading in environment variables.
+// ConfigFromEnv creates the application configuration by reading in environment variables.
 // If this function returns an error, it would be wise to exit the program with a non-zero exit code.
 func ConfigFromEnv() (*Config, error) {
 	// get hostname; refuse to start without one
@@ -66,9 +66,6 @@ func ConfigFromEnv() (*Config, error) {
 	if *appDevMode {
 		*appDebug = true
 		*forceHttpOnly = true
-
-		// slight hack: if in dev mode, set default API headers to include CORS allow all
-		enableCORS()
 
 		// create fake session
 		if env.Get("APP_DEV_USER") != "" {
