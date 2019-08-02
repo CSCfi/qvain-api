@@ -77,7 +77,6 @@ func (api *AuthApi) authHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonError(w, "unknown authentication method", http.StatusNotFound)
-	return
 }
 
 // listProviders lists configured providers at the auth endpoint.

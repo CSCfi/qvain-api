@@ -94,7 +94,6 @@ func smartError(w http.ResponseWriter, r *http.Request, msg string, status int) 
 		return
 	}
 	http.Error(w, msg, status)
-	return
 }
 
 // ifGet is a convenience function that serves http requests only if the method is GET.
@@ -126,23 +125,6 @@ func checkMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	return false
 }
 
-// apiHello catches all requests to the bare api endpoint.
-func apiHello(w http.ResponseWriter, r *http.Request) {
-	if r.RequestURI != "/api" && r.RequestURI != "/api/" {
-		jsonError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-
-	if r.Method != "GET" {
-		jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`"` + version.Id + ` api"` + "\n"))
-}
-
-// apiVersion returns the version information that was (hopefully) linked in at build time.
 func apiVersion(w http.ResponseWriter, r *http.Request) {
 	apiWriteHeaders(w)
 	w.Header().Set("ETag", `"`+version.CommitHash+`"`)
@@ -159,29 +141,6 @@ func apiVersion(w http.ResponseWriter, r *http.Request) {
 	enc.AddStringKey("repo", version.CommitRepo)
 	enc.AppendByte('}')
 	enc.Write()
-}
-
-func apiDatabaseCheck(db *psql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-			return
-		}
-
-		err := db.Check()
-
-		enc := gojay.BorrowEncoder(w)
-		defer enc.Release()
-
-		apiWriteHeaders(w)
-		enc.AppendByte('{')
-		enc.AddBoolKey("alive", err == nil)
-		if err != nil {
-			enc.AddStringKey("error", err.Error())
-		}
-		enc.AppendByte('}')
-		enc.Write()
-	})
 }
 
 // dbError handles database errors. It returns more specific API messages for predefined errors

@@ -26,7 +26,6 @@ func Root(config *Config) http.Handler {
 		default:
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		}
-		return
 	})
 }
 
