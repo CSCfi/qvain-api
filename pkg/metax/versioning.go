@@ -46,27 +46,20 @@ func GetIdentifier(blob []byte) string {
 	return gjson.GetBytes(blob, IdentifierKey).String()
 }
 
-// GetModificationDate returns the date of last modification for a dataset.
+// GetModificationDate returns the date of last modification (created, modified, deprecated, removed) for a dataset.
 func GetModificationDate(blob []byte) time.Time {
 	if len(blob) < 1 {
 		return time.Time{}
 	}
 
-	createdDate := gjson.GetBytes(blob, DateCreatedKey).Time()
-	date := createdDate
-	modifiedDate := gjson.GetBytes(blob, DateModifiedKey).Time()
-	if !modifiedDate.IsZero() && modifiedDate.After(date) {
-		date = modifiedDate
+	date := time.Time{}
+	results := gjson.GetManyBytes(blob, DateCreatedKey, DateModifiedKey, DateDeprecatedKey, DateRemovedKey)
+	for _, result := range results {
+		d := result.Time()
+		if d.After(date) {
+			date = d
+		}
 	}
-	deprecatedDate := gjson.GetBytes(blob, DateDeprecatedKey).Time()
-	if !deprecatedDate.IsZero() && deprecatedDate.After(date) {
-		date = deprecatedDate
-	}
-	removedDate := gjson.GetBytes(blob, DateRemovedKey).Time()
-	if !removedDate.IsZero() && removedDate.After(date) {
-		date = removedDate
-	}
-
 	return date
 }
 
