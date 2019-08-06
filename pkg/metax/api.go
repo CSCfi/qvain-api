@@ -92,7 +92,7 @@ func NewMetaxService(host string, params ...MetaxOption) *MetaxService {
 		logger:    zerolog.Nop(),
 		userAgent: "qvain (Go-http-client/" + runtime.Version() + ")",
 		client: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
 				DisableCompression: true,
 				DialContext: (&net.Dialer{
@@ -176,6 +176,15 @@ func WithUser(id string) DatasetOption {
 		}
 		qvals := req.URL.Query()
 		qvals.Add("metadata_provider_user", id)
+		req.URL.RawQuery = qvals.Encode()
+	}
+}
+
+// WithRemoved is a dataset option that filters dataset queries to those that have been removed.
+func WithRemoved() DatasetOption {
+	return func(req *http.Request) {
+		qvals := req.URL.Query()
+		qvals.Add("removed", "true")
 		req.URL.RawQuery = qvals.Encode()
 	}
 }

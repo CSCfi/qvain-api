@@ -156,6 +156,8 @@ type MetaxRecord struct {
 	DateCreated  *time.Time `json:"date_created"`
 	DateModified *time.Time `json:"date_modified"`
 
+	Removed bool `json:"removed"`
+
 	Editor *Editor `json:"editor"`
 
 	ResearchDataset json.RawMessage `json:"research_dataset"`
@@ -277,6 +279,7 @@ func (raw MetaxRawRecord) ToQvain() (*models.Dataset, bool, error) {
 	}
 
 	qdataset := new(models.Dataset)
+	qdataset.Removed = mrec.Removed
 
 	if isNew {
 		qdataset.Created = timeOrNow(mrec.DateCreated)

@@ -23,6 +23,7 @@ type Dataset struct {
 	Synced   time.Time
 
 	Published bool
+	Removed   bool
 	valid     bool
 
 	family int
