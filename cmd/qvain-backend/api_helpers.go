@@ -13,38 +13,10 @@ import (
 	"github.com/wvh/uuid"
 )
 
-// apiWriteHeaders points to a function writing either cors or no cors api responses.
-var apiWriteHeaders = apiWriteHeadersNoCors
-
-// enableCors sets api helper functions to CORS enabled versions.
-// It is not safe to call this function after starting the HTTP server.
-func enableCORS() {
-	apiWriteHeaders = apiWriteHeadersCorsAllowAll
-}
-
-// apiWriteHeadersNoCors writes standard header fields for all JSON api responses.
-func apiWriteHeadersNoCors(w http.ResponseWriter) {
+// apiWriteHeaders writes standard header fields for all JSON api responses.
+func apiWriteHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-}
-
-// apiWriteHeadersCorsAllowAll writes standard headers fields, allowing CORS from anywhere.
-func apiWriteHeadersCorsAllowAll(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Add("Vary", "Origin")
-}
-
-// apiWriteHeadersWithCache adds a caching header to the default api headers and writes them to the response.
-//
-// CC header values expressed in seconds:
-//   3600 (1h), 2592000 (30d), 31536000 (365d)
-// Example header:
-//   Cache-Control: public, max-age=31536000
-func apiWriteHeadersWithCache(w http.ResponseWriter, cc uint) {
-	apiWriteHeaders(w)
-	w.Header().Set("Cache-Control", "max-age=2592000") // 30d
 }
 
 // apiWriteOptions is a convenience function to add an OPTIONS response to API endpoints.
@@ -122,7 +94,6 @@ func smartError(w http.ResponseWriter, r *http.Request, msg string, status int) 
 		return
 	}
 	http.Error(w, msg, status)
-	return
 }
 
 // ifGet is a convenience function that serves http requests only if the method is GET.
@@ -154,23 +125,6 @@ func checkMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	return false
 }
 
-// apiHello catches all requests to the bare api endpoint.
-func apiHello(w http.ResponseWriter, r *http.Request) {
-	if r.RequestURI != "/api" && r.RequestURI != "/api/" {
-		jsonError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-
-	if r.Method != "GET" {
-		jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`"` + version.Id + ` api"` + "\n"))
-}
-
-// apiVersion returns the version information that was (hopefully) linked in at build time.
 func apiVersion(w http.ResponseWriter, r *http.Request) {
 	apiWriteHeaders(w)
 	w.Header().Set("ETag", `"`+version.CommitHash+`"`)
@@ -187,29 +141,6 @@ func apiVersion(w http.ResponseWriter, r *http.Request) {
 	enc.AddStringKey("repo", version.CommitRepo)
 	enc.AppendByte('}')
 	enc.Write()
-}
-
-func apiDatabaseCheck(db *psql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-			return
-		}
-
-		err := db.Check()
-
-		enc := gojay.BorrowEncoder(w)
-		defer enc.Release()
-
-		apiWriteHeaders(w)
-		enc.AppendByte('{')
-		enc.AddBoolKey("alive", err == nil)
-		if err != nil {
-			enc.AddStringKey("error", err.Error())
-		}
-		enc.AppendByte('}')
-		enc.Write()
-	})
 }
 
 // dbError handles database errors. It returns more specific API messages for predefined errors

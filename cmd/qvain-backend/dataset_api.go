@@ -167,7 +167,6 @@ func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *mod
 		jsonError(w, "invalid dataset operation", http.StatusNotFound)
 		return
 	}
-	return
 }
 
 // getDataset retrieves a dataset's whole blob or part thereof depending on the path.
@@ -187,7 +186,6 @@ func (api *DatasetApi) getDataset(w http.ResponseWriter, r *http.Request, owner 
 
 	apiWriteHeaders(w)
 	w.Write(res)
-	return
 }
 
 func (api *DatasetApi) createDataset(w http.ResponseWriter, r *http.Request, creator *models.User) {
@@ -377,6 +375,4 @@ func (api *DatasetApi) Published(w http.ResponseWriter, r *http.Request, id uuid
 	}
 	enc.AppendByte('}')
 	enc.Write()
-
-	return
 }

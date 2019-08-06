@@ -14,10 +14,9 @@ func TestCommonHandlers(t *testing.T) {
 	}{
 		{name: "root url", url: "/", status: http.StatusOK},
 		{name: "non-existent url", url: "/non-existent", status: http.StatusNotFound},
-		{name: "protected url without token", url: "/api/auth/check", status: http.StatusUnauthorized},
-		{name: "api endpoint", url: "/api", status: http.StatusOK},
-		{name: "api endpoint with slash", url: "/api/", status: http.StatusNotFound},
-		{name: "datasets endpoint without token", url: "/api/dataset", status: http.StatusMovedPermanently},
+		{name: "protected url without token", url: "/api/sessions/", status: http.StatusUnauthorized},
+		{name: "api endpoint", url: "/api", status: http.StatusNotFound},
+		{name: "api endpoint with slash", url: "/api/", status: http.StatusOK},
 	}
 
 	key, err := getTokenKey()
@@ -25,7 +24,7 @@ func TestCommonHandlers(t *testing.T) {
 		panic(err)
 	}
 
-	mux := makeMux(&Config{
+	mux := Root(&Config{
 		tokenKey: key,
 	})
 
