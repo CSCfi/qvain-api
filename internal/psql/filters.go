@@ -119,16 +119,32 @@ type DatasetFilter struct {
 	User          string       // filter by user (metadata_provider_user)
 	Organization  string       // filter by organization (metadata_provider_org)
 	GroupBy       string       // group values, see DatasetFilterGroupByPaths for valid options
+
+	// options for testing, not currently exposed in the stats API
+	QvainOwner    string // qvain id of owner
+	GroupTimeZone string // time zone used in grouping dates, supported values are "" (local) and "UTC"
+}
+
+// GroupByPath returns data path to use in GROUP BY statement.
+func (filter *DatasetFilter) GroupByPath() string {
+	path := DatasetFilterGroupByPaths[filter.GroupBy]
+	if filter.GroupTimeZone == "" {
+		path = strings.Replace(path, "$tz", "", 1)
+	} else if filter.GroupTimeZone == "UTC" {
+		path = strings.Replace(path, "$tz", " at time zone 'UTC'", 1)
+	}
+	return path
 }
 
 // DatasetFilterGroupByPaths provides queries for used for grouping datasets. Keys contained
 // in this map are the only valid options for group_by.
 var DatasetFilterGroupByPaths = map[string]string{
+	"schema":        `schema`,
 	"organization":  `blob->>'metadata_provider_org' as organization`,
 	"access_type":   `blob#>>'{"research_dataset","access_rights","access_type","identifier"}' as access_type`,
-	"day_created":   `date_trunc('day', created) as created`,
-	"month_created": `date_trunc('month', created) as created`,
-	"year_created":  `date_trunc('year', created) as created`,
+	"day_created":   `date_trunc('day', created$tz) as created`,
+	"month_created": `date_trunc('month', created$tz) as created`,
+	"year_created":  `date_trunc('year', created$tz) as created`,
 }
 
 // WhereBuilder is a helper object for creating SQL WHERE statements.

@@ -168,11 +168,12 @@ func (db *DB) CountDatasets(filter *DatasetFilter) (json.RawMessage, error) {
 	wb.MaybeAdd(filter.OnlyIda, `schema='metax-ida'`)
 	wb.MaybeAddString(filter.User, `blob->>'metadata_provider_user'=$`)
 	wb.MaybeAddString(filter.Organization, `blob->>'metadata_provider_org'=$`)
+	wb.MaybeAddString(filter.QvainOwner, `owner=$`)
 	for _, timeFilter := range filter.DateCreated {
 		wb.MaybeAddTimeFilter(timeFilter, `created`)
 	}
 	where, args := wb.Where()
-	groupBy := DatasetFilterGroupByPaths[filter.GroupBy]
+	groupBy := filter.GroupByPath()
 
 	var (
 		result json.RawMessage
