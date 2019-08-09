@@ -100,7 +100,6 @@ These are the environment variables Qvain looks for. The variables starting with
 | `APP_FORCE_HTTP_SCHEME` | `boolean` | redirect to http:// instead of https:// (we don't necessarily know if proxied) |
 | `APP_HOSTNAME`          | `string`  | canonical host name for http and tokens; defaults to the system's host name |
 | `APP_TOKEN_KEY`         | `string`  | secret key for checking signatures on tokens in hex format (see note below), at least 32 characters required |
-| `APP_ENV_CHECK`         | `string`  | test variable to check if environment has been set |
 |                         |           | |
 | `PGHOST`                | -         | psql host name |
 | `PGDATABASE`            | -         | psql database name |

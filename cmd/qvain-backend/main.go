@@ -71,10 +71,6 @@ func main() {
 	logger := config.NewLogger("main")
 	setStdlibLogger(config.NewLogger("log"))
 
-	if env.Get("APP_ENV_CHECK") == "" {
-		logger.Warn().Msg("environment variable APP_ENV_CHECK is not set")
-	}
-
 	// initialise database pool
 	err = config.initDB(config.NewLogger("psql"))
 	if err != nil {
