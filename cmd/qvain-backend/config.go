@@ -42,6 +42,9 @@ type Config struct {
 	oidcClientID     string
 	oidcClientSecret string
 
+	// stats api settings
+	qvainApiKey string
+
 	// configured service instances
 	db        *psql.DB
 	sessions  *sessions.Manager
@@ -97,6 +100,7 @@ func ConfigFromEnv() (*Config, error) {
 		MetaxApiHost:     env.Get("APP_METAX_API_HOST"),
 		metaxApiUser:     env.Get("APP_METAX_API_USER"),
 		metaxApiPass:     env.Get("APP_METAX_API_PASS"),
+		qvainApiKey:      env.Get("APP_QVAIN_API_KEY"),
 	}, nil
 }
 

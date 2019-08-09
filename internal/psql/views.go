@@ -2,6 +2,7 @@ package psql
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/CSCfi/qvain-api/pkg/models"
 	"github.com/wvh/uuid"
@@ -9,6 +10,7 @@ import (
 
 // apiEmptyList ensures an array is returned even if there are no results.
 var apiEmptyList = json.RawMessage([]byte(`[]`))
+var apiEmptyObject = json.RawMessage([]byte(`{}`))
 
 // ViewDatasetsByOwner builds a JSON array with the datasets for a given owner.
 func (db *DB) ViewDatasetsByOwner(owner uuid.UUID) (json.RawMessage, error) {
@@ -153,4 +155,52 @@ func (db *DB) ExportAsJson(id uuid.UUID) (json.RawMessage, error) {
 	}
 
 	return dataset, nil
+}
+
+// CountDatasets gives the number of datasets matching the DatasetFilter.
+// Returns a json object containing the count.
+// If grouping is enabled, returns a json array containing the grouped results.
+func (db *DB) CountDatasets(filter *DatasetFilter) (json.RawMessage, error) {
+	wb := NewWhereBuilder()
+	wb.MaybeAdd(filter.OnlyDrafts, `published=false`)
+	wb.MaybeAdd(filter.OnlyPublished, `published=true`)
+	wb.MaybeAdd(filter.OnlyAtt, `schema='metax-att'`)
+	wb.MaybeAdd(filter.OnlyIda, `schema='metax-ida'`)
+	wb.MaybeAddString(filter.User, `blob->>'metadata_provider_user'=$`)
+	wb.MaybeAddString(filter.Organization, `blob->>'metadata_provider_org'=$`)
+	for _, timeFilter := range filter.DateCreated {
+		wb.MaybeAddTimeFilter(timeFilter, `created`)
+	}
+	where, args := wb.Where()
+	groupBy := DatasetFilterGroupByPaths[filter.GroupBy]
+
+	var (
+		result json.RawMessage
+		err    error
+	)
+
+	if groupBy != "" {
+		err = db.pool.QueryRow(fmt.Sprintf(
+			`SELECT COALESCE(json_agg(r), '[]')
+			FROM (
+				SELECT %s, COUNT(*) as count
+				FROM datasets %s
+				GROUP BY 1 ORDER BY 1
+			) r`, groupBy, where), args...).Scan(&result)
+
+		if err != nil {
+			return apiEmptyList, handleError(err)
+		}
+	} else {
+		err = db.pool.QueryRow(fmt.Sprintf(
+			`SELECT row_to_json(r)
+			FROM (
+				select COUNT(*) as count FROM datasets %s
+			) r`, where), args...).Scan(&result)
+		if err != nil {
+			return apiEmptyObject, handleError(err)
+		}
+	}
+
+	return result, nil
 }

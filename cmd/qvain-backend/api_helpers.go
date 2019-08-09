@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 
@@ -262,4 +263,100 @@ func GetUuidParam(head string) (uuid.UUID, error) {
 
 func TrimSlash(s string) string {
 	return strings.TrimRight(s, "/")
+}
+
+// QueryParser provides helper functions for converting query parameters into Go types.
+type QueryParser struct {
+	query         url.Values
+	checkedParams map[string]bool
+	invalidParams []string
+}
+
+// NewQueryParser creates a new QueryParser for a query.
+func NewQueryParser(query url.Values) *QueryParser {
+	return &QueryParser{
+		query:         query,
+		checkedParams: map[string]bool{},
+		invalidParams: make([]string, 0),
+	}
+}
+
+// Flag returns true when param has the value "true" or is present but has no value.
+func (q *QueryParser) Flag(param string) bool {
+	q.checkedParams[param] = true
+	val, exists := q.query[param]
+	if !exists {
+		return false
+	}
+	if val[0] == "" || val[0] == "true" {
+		return true
+	}
+
+	q.invalidParams = append(q.invalidParams, param+"="+val[0])
+	return false
+}
+
+// TimeFilters converts parameters with a suffix and a (optionally truncated) RFC3339 time value into
+// timeFilters representing time comparisons. See psql.ParseTimeFilter for further information.
+func (q *QueryParser) TimeFilters(param string) (filters []psql.TimeFilter) {
+	for suffix := range psql.ComparisonSuffixes {
+		q.checkedParams[param+suffix] = true
+		val, exists := q.query[param+suffix]
+		if !exists {
+			continue
+		}
+
+		if filter := psql.ParseTimeFilter(suffix, val[0]); !filter.IsZero() {
+			filters = append(filters, filter)
+		} else {
+			q.invalidParams = append(q.invalidParams, param+suffix+"="+val[0])
+		}
+	}
+
+	return filters
+}
+
+// String returns a string parameter.
+func (q *QueryParser) String(param string) string {
+	q.checkedParams[param] = true
+	val, exists := q.query[param]
+	if !exists {
+		return ""
+	}
+	return val[0]
+}
+
+// StringOption returns the string parameter only if it is a key in the options map.
+func (q *QueryParser) StringOption(param string, options map[string]string) string {
+	q.checkedParams[param] = true
+	val, exists := q.query[param]
+	if !exists {
+		return ""
+	}
+	_, isKey := options[val[0]]
+	if !isKey {
+		q.invalidParams = append(q.invalidParams, param+"="+val[0])
+		return ""
+	}
+	return val[0]
+}
+
+// Skip marks parameter as used but ignores its value.
+func (q *QueryParser) Skip(param string) {
+	q.checkedParams[param] = true
+}
+
+// Validate returns query parameters that either:
+// - have an invalid value
+// - have multiple values
+// - are unused
+func (q *QueryParser) Validate() (invalidParams []string) {
+	for param, values := range q.query {
+		if !q.checkedParams[param] {
+			q.invalidParams = append(q.invalidParams, param+" (unknown parameter)")
+		} else if len(values) > 1 {
+			q.invalidParams = append(q.invalidParams, param+" (multiple values)")
+		}
+	}
+	return q.invalidParams
 }

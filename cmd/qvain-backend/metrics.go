@@ -15,6 +15,7 @@ var (
 	authC     expvar.Int
 	proxyC    expvar.Int
 	lookupC   expvar.Int
+	statsC    expvar.Int
 	versionC  expvar.Int
 
 	// map containers
@@ -65,6 +66,7 @@ func init() {
 	metricsApis.Set("auth", &authC)
 	metricsApis.Set("proxy", &proxyC)
 	metricsApis.Set("lookup", &lookupC)
+	metricsApis.Set("stats", &statsC)
 	metricsApis.Set("version", &versionC)
 
 	startupVar.Set(startupTime.UTC().Format(time.RFC3339))
