@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// StatsApi provides statistics for Qvain.
 type StatsApi struct {
 	db         *psql.DB
 	logger     zerolog.Logger
@@ -20,7 +21,7 @@ type StatsApi struct {
 	requireKey bool
 }
 
-// NewStatsApi retsktosesokf
+// NewStatsApi creates a new StatsApi.
 func NewStatsApi(db *psql.DB, logger zerolog.Logger, apiKey string, requireKey bool) *StatsApi {
 	return &StatsApi{
 		db:         db,
@@ -32,20 +33,18 @@ func NewStatsApi(db *psql.DB, logger zerolog.Logger, apiKey string, requireKey b
 }
 
 func (api *StatsApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// TODO: AUTHENTICATION
+	if api.apiKey == "" && api.requireKey {
+		api.logger.Error().Msg("missing api key")
+		jsonError(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
+	}
 
-	/*	if api.apiKey == "" {
-			api.logger.Error().Msg("missing api key")
-			jsonError(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-			return
-		}
-
-		key := r.URL.Query().Get("key")
-		if key != api.apiKey {
-			api.logger.Error().Msg("invalid api key")
-			jsonError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-			return
-		} */
+	key := r.URL.Query().Get("key")
+	if key != api.apiKey {
+		api.logger.Error().Msg("invalid api key")
+		jsonError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
 
 	head := ShiftUrlWithTrailing(r)
 	api.logger.Debug().Str("head", head).Str("path", r.URL.Path).Str("method", r.Method).Msg("stats")
@@ -79,7 +78,7 @@ func getDatasetFilter(query url.Values) (*psql.DatasetFilter, []string) {
 	return filter, parser.Validate()
 }
 
-// Datasets lsldfol
+// Datasets provides dataset counts.
 func (api *StatsApi) Datasets(w http.ResponseWriter, r *http.Request) {
 	filter, invalidParams := getDatasetFilter(r.URL.Query())
 	fmt.Printf("%+v\n", filter)

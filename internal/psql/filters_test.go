@@ -137,6 +137,28 @@ func TestDatasetFilter(t *testing.T) {
 		t.Errorf("expected 8 draft datasets")
 	}
 
+	// String
+	count = getCount(DatasetFilter{User: "testimatti"})
+	if count != 7 {
+		t.Errorf("expected 7 datasets for testimatti")
+	}
+	count = getCount(DatasetFilter{User: "testiteppo"})
+	if count != 3 {
+		t.Errorf("expected 3 datasets for testiteppo")
+	}
+	count = getCount(DatasetFilter{Organization: "testiorg"})
+	if count != 6 {
+		t.Errorf("expected 6 datasets for testiorg")
+	}
+	count = getCount(DatasetFilter{Organization: "otherorg"})
+	if count != 3 {
+		t.Errorf("expected 3 datasets for otherorg")
+	}
+	count = getCount(DatasetFilter{Organization: "thirdorg"})
+	if count != 1 {
+		t.Errorf("expected 1 dataset for thirdorg")
+	}
+
 	// TimeFilters
 	count = getCount(DatasetFilter{DateCreated: []TimeFilter{ParseTimeFilter("_eq", "9999Z")}})
 	if count != 10 {
@@ -196,21 +218,8 @@ func TestDatasetFilter(t *testing.T) {
 		t.Errorf("error in GroupBy: schema [%v]", counts)
 	}
 
-	counts = getGroupCount(DatasetFilter{GroupBy: "year_created"})
-	if len(counts) != 1 {
-		t.Errorf("expected 1 group for year_created [%v]", counts)
-	}
-	counts = getGroupCount(DatasetFilter{GroupBy: "month_created"})
-	if len(counts) != 5 {
-		t.Errorf("expected 5 groups for month_created [%v]", counts)
-	}
-	counts = getGroupCount(DatasetFilter{GroupBy: "day_created"})
+	counts = getGroupCount(DatasetFilter{GroupBy: "date_created"})
 	if len(counts) != 6 {
-		t.Errorf("expected 6 groups for day_created [%v]", counts)
+		t.Errorf("expected 6 groups for date_created [%v]", counts)
 	}
-
-	t.Run("create", func(t *testing.T) {
-
-	})
-
 }

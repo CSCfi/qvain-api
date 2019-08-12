@@ -139,12 +139,10 @@ func (filter *DatasetFilter) GroupByPath() string {
 // DatasetFilterGroupByPaths provides queries for used for grouping datasets. Keys contained
 // in this map are the only valid options for group_by.
 var DatasetFilterGroupByPaths = map[string]string{
-	"schema":        `schema`,
-	"organization":  `blob->>'metadata_provider_org' as organization`,
-	"access_type":   `blob#>>'{"research_dataset","access_rights","access_type","identifier"}' as access_type`,
-	"day_created":   `date_trunc('day', created$tz) as created`,
-	"month_created": `date_trunc('month', created$tz) as created`,
-	"year_created":  `date_trunc('year', created$tz) as created`,
+	"schema":       `schema`,
+	"organization": `blob->>'metadata_provider_org' as organization`,
+	"access_type":  `blob#>>'{"research_dataset","access_rights","access_type","identifier"}' as access_type`,
+	"date_created": `date_trunc('day', created$tz) as created`,
 }
 
 // WhereBuilder is a helper object for creating SQL WHERE statements.
