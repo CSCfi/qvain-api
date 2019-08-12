@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -81,10 +80,8 @@ func getDatasetFilter(query url.Values) (*psql.DatasetFilter, []string) {
 // Datasets provides dataset counts.
 func (api *StatsApi) Datasets(w http.ResponseWriter, r *http.Request) {
 	filter, invalidParams := getDatasetFilter(r.URL.Query())
-	fmt.Printf("%+v\n", filter)
 
 	apiWriteHeaders(w)
-
 	enc := gojay.BorrowEncoder(w)
 	defer enc.Release()
 
