@@ -175,6 +175,7 @@ func NewWhereBuilder() *WhereBuilder {
 
 // addArg adds a new argument to args. Any input provided by the users should
 // be put in args instead of using them directly in a query to prevent SQL injection.
+// Returns the position of the added argument, e.g. $3 for the third argument.
 func (w *WhereBuilder) addArg(param interface{}) string {
 	w.args = append(w.args, param)
 	return "$" + strconv.Itoa(len(w.args))
