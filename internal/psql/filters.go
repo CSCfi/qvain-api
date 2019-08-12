@@ -64,7 +64,8 @@ func (t *TimeFilter) IsZero() bool {
 // - param_gt  greater than
 //
 // The function accepts RFC3339 dates. In addition, the date can be truncated to
-// desired precision. If timezone offset is not specified, local timezone is assumed.
+// desired precision and timezone offset is optional. If timezone offset is not specified,
+// the local timezone is assumed.
 // - year:    2019
 // - month:   2019-08
 // - date:    2019-08-27
@@ -86,7 +87,7 @@ func ParseTimeFilter(suffix string, timeString string) TimeFilter {
 	)
 	str := strings.Replace(timeString, " ", "+", -1)
 
-	// use time zone if available, otherwise assume local timezone
+	// use time zone offset if available, otherwise use local timezone
 	tz := ""
 	if TimeZoneRegex.MatchString(str) {
 		tz = "Z07:00"
@@ -125,6 +126,15 @@ type DatasetFilter struct {
 	GroupTimeZone string // time zone used in grouping dates, supported values are "" (local) and "UTC"
 }
 
+// DatasetFilterGroupByPaths provides paths/values for grouping datasets. Keys contained
+// in this map are the only valid options for group_by.
+var DatasetFilterGroupByPaths = map[string]string{
+	"schema":       `schema`,
+	"organization": `blob->>'metadata_provider_org' as organization`,
+	"access_type":  `blob#>>'{"research_dataset","access_rights","access_type","identifier"}' as access_type`,
+	"date_created": `date_trunc('day', created$tz) as created`,
+}
+
 // GroupByPath returns data path to use in GROUP BY statement.
 func (filter *DatasetFilter) GroupByPath() string {
 	path := DatasetFilterGroupByPaths[filter.GroupBy]
@@ -136,13 +146,20 @@ func (filter *DatasetFilter) GroupByPath() string {
 	return path
 }
 
-// DatasetFilterGroupByPaths provides queries for used for grouping datasets. Keys contained
-// in this map are the only valid options for group_by.
-var DatasetFilterGroupByPaths = map[string]string{
-	"schema":       `schema`,
-	"organization": `blob->>'metadata_provider_org' as organization`,
-	"access_type":  `blob#>>'{"research_dataset","access_rights","access_type","identifier"}' as access_type`,
-	"date_created": `date_trunc('day', created$tz) as created`,
+// Where returns the WHERE statement for the filter.
+func (filter *DatasetFilter) Where() (string, []interface{}) {
+	wb := NewWhereBuilder()
+	wb.MaybeAdd(filter.OnlyDrafts, `published=false`)
+	wb.MaybeAdd(filter.OnlyPublished, `published=true`)
+	wb.MaybeAdd(filter.OnlyAtt, `schema='metax-att'`)
+	wb.MaybeAdd(filter.OnlyIda, `schema='metax-ida'`)
+	wb.MaybeAddString(filter.User, `blob->>'metadata_provider_user'=$`)
+	wb.MaybeAddString(filter.Organization, `blob->>'metadata_provider_org'=$`)
+	wb.MaybeAddString(filter.QvainOwner, `owner=$`)
+	for _, timeFilter := range filter.DateCreated {
+		wb.MaybeAddTimeFilter(timeFilter, `created`)
+	}
+	return wb.Where()
 }
 
 // WhereBuilder is a helper object for creating SQL WHERE statements.
@@ -168,7 +185,7 @@ func (w *WhereBuilder) cprintf(format string, a ...interface{}) {
 	w.conditions = append(w.conditions, fmt.Sprintf(format, a...))
 }
 
-// Where returns the WHERE statement
+// Where returns the WHERE statement.
 func (w *WhereBuilder) Where() (string, []interface{}) {
 	if len(w.conditions) == 0 {
 		return "", make([]interface{}, 0)

@@ -281,7 +281,7 @@ func NewQueryParser(query url.Values) *QueryParser {
 	}
 }
 
-// Flag returns true when param has the value "true" or is present but has no value.
+// Flag returns true when param is "true" or is present but has no value.
 func (q *QueryParser) Flag(param string) bool {
 	q.checkedParams[param] = true
 	val, exists := q.query[param]
@@ -297,7 +297,7 @@ func (q *QueryParser) Flag(param string) bool {
 }
 
 // TimeFilters converts parameters with a suffix and a (optionally truncated) RFC3339 time value into
-// timeFilters representing time comparisons. See psql.ParseTimeFilter for further information.
+// an TimeFilter array representing time comparisons. See psql.ParseTimeFilter for further information.
 func (q *QueryParser) TimeFilters(param string) (filters []psql.TimeFilter) {
 	for suffix := range psql.ComparisonSuffixes {
 		q.checkedParams[param+suffix] = true

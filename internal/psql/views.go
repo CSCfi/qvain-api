@@ -161,18 +161,7 @@ func (db *DB) ExportAsJson(id uuid.UUID) (json.RawMessage, error) {
 // Returns a json object containing the count.
 // If grouping is enabled, returns a json array containing the grouped results.
 func (db *DB) CountDatasets(filter *DatasetFilter) (json.RawMessage, error) {
-	wb := NewWhereBuilder()
-	wb.MaybeAdd(filter.OnlyDrafts, `published=false`)
-	wb.MaybeAdd(filter.OnlyPublished, `published=true`)
-	wb.MaybeAdd(filter.OnlyAtt, `schema='metax-att'`)
-	wb.MaybeAdd(filter.OnlyIda, `schema='metax-ida'`)
-	wb.MaybeAddString(filter.User, `blob->>'metadata_provider_user'=$`)
-	wb.MaybeAddString(filter.Organization, `blob->>'metadata_provider_org'=$`)
-	wb.MaybeAddString(filter.QvainOwner, `owner=$`)
-	for _, timeFilter := range filter.DateCreated {
-		wb.MaybeAddTimeFilter(timeFilter, `created`)
-	}
-	where, args := wb.Where()
+	where, args := filter.Where()
 	groupBy := filter.GroupByPath()
 
 	var (
