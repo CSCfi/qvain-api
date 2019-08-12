@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CSCfi/qvain-api/pkg/metax"
 	"github.com/CSCfi/qvain-api/pkg/models"
 	"github.com/wvh/uuid"
 )
@@ -34,7 +35,7 @@ func createDataset(t *testing.T, db *DB, created string, user string, org string
 	if err != nil {
 		t.Fatal("time.Parse:", err)
 	}
-	dataset.SetData(2, schema, blob)
+	dataset.SetData(metax.MetaxDatasetFamily, schema, blob)
 	dataset.Created = tim
 	dataset.Modified = tim
 	dataset.Published = published
@@ -48,10 +49,6 @@ func createDataset(t *testing.T, db *DB, created string, user string, org string
 }
 
 func TestDatasetFilter(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode")
-	}
-
 	db, err := NewPoolServiceFromEnv()
 	if err != nil {
 		t.Fatal("psql:", err)
@@ -71,6 +68,7 @@ func TestDatasetFilter(t *testing.T) {
 	cleanUp()
 	defer cleanUp()
 
+	// create temporary test data that will be deleted afterwards
 	createDataset(t, db, "9999-01-01T10:00:00.11Z", "testimatti", "testiorg", "/access_type/open", "metax-ida", true)
 	createDataset(t, db, "9999-02-01T10:00:00.12Z", "testimatti", "testiorg", "/access_type/open", "metax-att", false)
 	createDataset(t, db, "9999-02-01T10:30:00.12Z", "testimatti", "testiorg", "/access_type/open", "metax-att", false)
