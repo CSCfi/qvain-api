@@ -233,6 +233,7 @@ func TestQueryParser(t *testing.T) {
 
 	invalid := parser.Validate()
 	if len(invalid) != expectedErrors {
+		t.Errorf(`len(invalid) != expectedErrors`)
 		fmt.Println("invalid: ")
 		fmt.Println(strings.Join(invalid, ", \n"))
 	}
