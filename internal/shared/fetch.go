@@ -50,6 +50,27 @@ func fetch(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid uuid
 		params = append(params, metax.Since(since))
 	}
 
+	// fetch user datasets from Metax
+	logger.Info().Str("user", uid.String()).Str("identity", extid).Msg("starting sync")
+	err := syncBatch(api, db, logger, uid, params)
+	if err != nil {
+		logger.Info().Err(err).Msg("fetch failed")
+		return err
+	}
+
+	// fetch removed user datasets from Metax
+	logger.Info().Str("user", uid.String()).Str("identity", extid).Msg("syncing removed")
+	params = append(params, metax.WithRemoved())
+	err = syncBatch(api, db, logger, uid, params)
+	if err != nil {
+		logger.Info().Err(err).Msg("fetch failed")
+		return err
+	}
+
+	return nil
+}
+
+func syncBatch(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid uuid.UUID, params []metax.DatasetOption) error {
 	// setup DB batch transaction
 	batch, err := db.NewBatchForUser(uid)
 	if err != nil {
@@ -60,20 +81,20 @@ func fetch(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid uuid
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultRequestTimeout)
 	defer cancel()
 
+	// create sub-logger to correlate possibly multiple log entries
+	syncLogger := logger.With().Str("sync-id", xid.New().String()).Logger()
+
 	// make API request
 	total, c, errc, err := api.ReadStreamChannel(ctx, params...)
 	if err != nil {
 		return err
 	}
 
-	//logger.Info().Str("user", uid.String()).Str("identity", extid).Int("count", total).Msg("starting sync with metax")
-
-	// create sub-logger to correlate possibly multiple log entries
-	syncLogger := logger.With().Str("sync-id", xid.New().String()).Logger()
-	syncLogger.Info().Str("user", uid.String()).Str("identity", extid).Int("total", total).Msg("starting sync")
-
 	read := 0
 	written := 0
+	deleted := 0
+	skipped := 0
+	failed := 0
 	success := false
 
 	// get existing Qvain datasets for user
@@ -121,7 +142,8 @@ Done:
 			// create dataset, use Qvain id from editor metadata if available
 			dataset, isNew, err := fdDataset.ToQvain()
 			if err != nil {
-				syncLogger.Debug().Err(err).Int("read", read).Msg("error parsing dataset, skipping")
+				syncLogger.Debug().Err(err).Int("read", read).Msg("error parsing dataset")
+				failed++
 				continue
 			}
 
@@ -139,6 +161,26 @@ Done:
 				}
 			}
 
+			// delete qvain dataset
+			if dataset.Removed {
+				// if the map doesn't contain a previous sync, assume dataset does not exist in qvain
+				if qvainDatasetSyncTime[dataset.Id].IsZero() {
+					skipped++
+					continue
+				}
+
+				// delete qvain dataset
+				if err = batch.Delete(dataset.Id); err != nil {
+					syncLogger.Debug().Err(err).Int("read", read).Str("id", dataset.Id.String()).Msg("can't delete dataset")
+					failed++
+					continue
+				}
+				syncLogger.Debug().Str("id", dataset.Id.String()).Msg("deleted dataset")
+				deleted++
+				continue
+			}
+
+			// create new qvain dataset
 			if isNew {
 				// create new id
 				dataset.Id, err = uuid.NewUUID()
@@ -156,26 +198,35 @@ Done:
 
 				if err = batch.CreateWithMetadata(dataset); err != nil {
 					syncLogger.Debug().Err(err).Int("read", read).Str("id", dataset.Id.String()).Msg("can't store dataset")
+					failed++
 					continue
 				}
-			} else {
-				// check if we have already synced the Qvain dataset based on modification dates
-				modified := metax.GetModificationDate(dataset.Blob())
-				if !modified.IsZero() && !modified.After(qvainDatasetSyncTime[dataset.Id]) {
-					syncLogger.Debug().Str("id", dataset.Id.String()).Msg("dataset not modified in Metax after last sync")
-					if err = batch.UpdateSynced(dataset.Id); err != nil {
-						syncLogger.Debug().Err(err).Int("read", read).Str("id", dataset.Id.String()).Msg("could't update sync timestamp")
-					}
-					continue
-				}
-
-				if err = batch.Update(dataset.Id, dataset.Blob()); err != nil {
-					syncLogger.Debug().Err(err).Int("read", read).Str("id", dataset.Id.String()).Msg("can't update dataset")
-					continue
-				}
+				written++
+				continue
 			}
-			syncLogger.Debug().Bool("new", isNew).Str("id", dataset.Id.String()).Msg("batched dataset")
+
+			// check if we have already synced the Qvain dataset based on modification dates
+			modified := metax.GetModificationDate(dataset.Blob())
+			if !modified.IsZero() && !modified.After(qvainDatasetSyncTime[dataset.Id]) {
+				syncLogger.Debug().Str("id", dataset.Id.String()).Msg("dataset not modified in Metax after last sync")
+				if err = batch.UpdateSynced(dataset.Id); err != nil {
+					syncLogger.Debug().Err(err).Int("read", read).Str("id", dataset.Id.String()).Msg("could't update sync timestamp")
+					failed++
+					continue
+				}
+				skipped++
+				continue
+			}
+
+			// update qvain dataset
+			if err = batch.Update(dataset.Id, dataset.Blob()); err != nil {
+				syncLogger.Debug().Err(err).Int("read", read).Str("id", dataset.Id.String()).Msg("can't update dataset")
+				failed++
+				continue
+			}
+			syncLogger.Debug().Bool("new", isNew).Str("id", dataset.Id.String()).Msg("updated dataset")
 			written++
+
 		case err := <-errc:
 			// error while streaming
 			syncLogger.Info().Err(err).Msg("api error")
@@ -190,9 +241,11 @@ Done:
 		err = batch.Commit()
 	}
 	if err != nil {
+		syncLogger.Info().Err(err).Msg("batch error")
 		return err
 	}
 
-	syncLogger.Info().Int("total", total).Int("written", written).Msg("successful sync")
+	syncLogger.Info().Int("total", total).Int("written", written).
+		Int("skipped", skipped).Int("deleted", deleted).Int("failed", failed).Msg("successful sync")
 	return nil
 }

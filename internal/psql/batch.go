@@ -52,6 +52,10 @@ func (b *BatchManager) Upsert(data *models.Dataset) error {
 	return ErrNotImplemented
 }
 
+func (b *BatchManager) Delete(id uuid.UUID) error {
+	return b.tx.deleteByService(id)
+}
+
 func (b *BatchManager) writeStamp() error {
 	if b.triggerUid == nil {
 		return nil

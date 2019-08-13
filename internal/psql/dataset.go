@@ -228,6 +228,20 @@ func (tx *Tx) updateByService(id uuid.UUID, blob []byte) error {
 	return nil
 }
 
+// internal delete, service triggered
+func (tx *Tx) deleteByService(id uuid.UUID) error {
+	ct, err := tx.Exec(`DELETE FROM datasets WHERE id = $1`, id.Array())
+	if err != nil {
+		return err
+	}
+
+	if ct.RowsAffected() != 1 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
 func (db *DB) Patch(id uuid.UUID, blob []byte) error {
 	tx, err := db.Begin()
 	if err != nil {
