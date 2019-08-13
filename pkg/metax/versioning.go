@@ -30,6 +30,12 @@ var (
 
 	// DateModifiedKey is the key for the Metax dataset modification timestamp.
 	DateModifiedKey = "date_modified"
+
+	// DateDeprecatedKey is the key for the Metax dataset deprecation timestamp.
+	DateDeprecatedKey = "date_deprecated"
+
+	// DateRemovedKey is the key for the Metax dataset removal timestamp.
+	DateRemovedKey = "date_removed"
 )
 
 func GetIdentifier(blob []byte) string {
@@ -40,16 +46,21 @@ func GetIdentifier(blob []byte) string {
 	return gjson.GetBytes(blob, IdentifierKey).String()
 }
 
+// GetModificationDate returns the date of last modification (created, modified, deprecated, removed) for a dataset.
 func GetModificationDate(blob []byte) time.Time {
 	if len(blob) < 1 {
 		return time.Time{}
 	}
 
-	val := gjson.GetBytes(blob, DateModifiedKey).Time()
-	if val.IsZero() {
-		val = gjson.GetBytes(blob, DateCreatedKey).Time()
+	date := time.Time{}
+	results := gjson.GetManyBytes(blob, DateCreatedKey, DateModifiedKey, DateDeprecatedKey, DateRemovedKey)
+	for _, result := range results {
+		d := result.Time()
+		if d.After(date) {
+			date = d
+		}
 	}
-	return val
+	return date
 }
 
 func IsPublished(blob []byte) bool {
