@@ -246,6 +246,21 @@ func (api *DatasetApi) updateDataset(w http.ResponseWriter, r *http.Request, own
 
 	api.logger.Debug().Str("owner", owner.Uid.String()).Msg("owner")
 
+	// perform checks on the updated dataset before saving it
+	dataset, err := api.db.GetWithOwner(id, owner.Uid)
+	if err != nil {
+		dbError(w, err)
+		return
+	}
+	if dataset.Family() == metax.MetaxDatasetFamily {
+		metaxDataset := &metax.MetaxDataset{Dataset: dataset}
+		err = metaxDataset.ValidateUpdatedDataset(typed.Unwrap())
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
 	err = api.db.SmartUpdateWithOwner(id, typed.Unwrap().Blob(), owner.Uid)
 	if err != nil {
 		dbError(w, err)
