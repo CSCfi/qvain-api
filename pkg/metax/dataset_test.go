@@ -131,3 +131,74 @@ func TestMetaxDatasetParsing(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateUpdatedDataset(t *testing.T) {
+	rawDataset := `{
+		"data_catalog":{"id":1,"identifier":"urn:nbn:fi:att:data-catalog-ida"},
+		"identifier":"urn:nbn:fi:att:bfe2d120-6ceb-4949-9755-882ab54c45b2",
+		"research_dataset":{
+			"title":{"en":"Wonderful Title"},
+			"total_files_byte_size":200,
+			"preferred_identifier":"urn:nbn:fi:att:fe7ed696-2a60-4d0c-b707-ee02c2bcd616",
+			"metadata_version_identifier":"urn:nbn:fi:att:be138915-2b91-4dbe-91b0-8f4e72e816b4"
+		}
+	}`
+	unparsed := MetaxRawRecord{json.RawMessage(rawDataset)}
+	dataset, _, err := unparsed.ToQvain()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	metaxDataset := &MetaxDataset{Dataset: dataset}
+
+	TestField := func(t *testing.T, field string, raw []byte) error {
+		t.Helper()
+		unparsed := MetaxRawRecord{json.RawMessage(rawDataset)}
+		updated, _, _ := unparsed.ToQvain()
+		newBlob, err := sjson.SetRawBytes(metaxDataset.Blob(), field, raw)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+		updated.SetData(updated.Family(), updated.Schema(), newBlob)
+		return metaxDataset.ValidateUpdatedDataset(updated)
+	}
+
+	TestDeleteField := func(t *testing.T, field string) error {
+		t.Helper()
+		unparsed := MetaxRawRecord{json.RawMessage(rawDataset)}
+		updated, _, _ := unparsed.ToQvain()
+		newBlob, err := sjson.DeleteBytes(metaxDataset.Blob(), field)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+		updated.SetData(updated.Family(), updated.Schema(), newBlob)
+		return metaxDataset.ValidateUpdatedDataset(updated)
+	}
+
+	// change preferred identifier
+	err = TestField(t, "research_dataset.preferred_identifier", []byte(`""`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// change total_files_byte_size
+	err = TestField(t, "research_dataset.total_files_byte_size", []byte(`201`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+	err = TestField(t, "research_dataset.total_files_byte_size", []byte(`200`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// change metadata_version_identifier
+	err = TestField(t, "research_dataset.metadata_version_identifier", []byte(`""`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// delete field
+	err = TestDeleteField(t, "research_dataset.metadata_version_identifier")
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+}

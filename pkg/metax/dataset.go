@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/CSCfi/qvain-api/pkg/models"
+	"github.com/tidwall/gjson"
 	"github.com/wvh/uuid"
 )
 
@@ -132,6 +133,35 @@ func (dataset *MetaxDataset) UpdateData(family int, schema string, blob []byte, 
 	}
 
 	dataset.Dataset.SetData(family, schema, newBlob)
+
+	return nil
+}
+
+// ValidateUpdatedDataset checks that updated dataset can be saved.
+func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) error {
+	if dataset.Family() != updated.Family() {
+		return errors.New("dataset family mismatch")
+	}
+
+	if dataset.Schema() != updated.Schema() {
+		return errors.New("dataset schema mismatch")
+	}
+
+	// readOnly fields from the schema
+	readOnlyFields := []string{
+		"research_dataset.metadata_version_identifier",
+		"research_dataset.preferred_identifier",
+		"research_dataset.total_files_byte_size",
+	}
+
+	// check that readOnly fields have not changed
+	for _, field := range readOnlyFields {
+		oldVal := gjson.GetBytes(dataset.Blob(), field).Raw
+		newVal := gjson.GetBytes(updated.Blob(), field).Raw
+		if oldVal != newVal {
+			return fmt.Errorf("readonly field %s changed %s -> %s", field, oldVal, newVal)
+		}
+	}
 
 	return nil
 }
