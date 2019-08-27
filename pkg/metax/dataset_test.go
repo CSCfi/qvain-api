@@ -201,4 +201,14 @@ func TestValidateUpdatedDataset(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected an error")
 	}
+
+	// add preservation state to metaxDataset
+	pasBlob, _ := sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`80`))
+	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
+
+	// if preservation_state >= 80, all updates should be forbidden
+	err = TestField(t, "resarch_dataset.some_field", []byte(`"some_value"`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
 }
