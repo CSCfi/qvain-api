@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 )
 
+// These constants are used to identify the schema a dataset is using
 const (
 	SchemaIda = "metax-ida"
 	SchemaAtt = "metax-att"
@@ -14,6 +15,7 @@ var (
 	CatalogIdentifiers = map[string]string{
 		"urn:nbn:fi:att:data-catalog-ida": SchemaIda,
 		"urn:nbn:fi:att:data-catalog-att": SchemaAtt,
+		"urn:nbn:fi:att:data-catalog-pas": SchemaIda, // Datasets in PAS catalog cannot be created in Qvain, only updated
 	}
 
 	// templates variable contains the base templates for empty metax datasets.

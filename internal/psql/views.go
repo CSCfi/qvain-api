@@ -21,11 +21,12 @@ func (db *DB) ViewDatasetsByOwner(owner uuid.UUID) (json.RawMessage, error) {
 	err := db.pool.QueryRow(`
 		SELECT json_agg(result) "by_owner"
 		FROM (
-			SELECT id, owner, created, modified, synced, seq, published,
+			SELECT id, owner, created, modified, synced, seq, published, schema,
 				blob#>'{identifier}' identifier,
 				blob#>'{research_dataset,title}' title,
 				blob#>'{research_dataset,description}' description,
 				blob#>'{preservation_state}' preservation_state,
+				coalesce(blob#>'{data_catalog,identifier}', blob#>'{data_catalog}') data_catalog,
 				blob#>'{previous_dataset_version,identifier}' previous,
 				blob#>'{next_dataset_version,identifier}' "next",
 				blob#>'{deprecated}' deprecated,
@@ -117,6 +118,8 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 			SELECT id, created, modified, seq, synced, published,
 				family AS type, schema, blob AS dataset,
 				blob#>'{identifier}' identifier,
+				blob#>'{preservation_state}' preservation_state,
+				coalesce(blob#>'{data_catalog,identifier}', blob#>'{data_catalog}') data_catalog,
 				blob#>'{next_dataset_version,identifier}' "next",
 				blob#>'{deprecated}' deprecated,
 				(SELECT extids->$2 FROM identities WHERE uid = creator) AS creator,
@@ -131,6 +134,8 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 			SELECT id, created, modified, seq, synced, published,
 				family AS type, schema, blob#>$2 AS dataset,
 				blob#>'{identifier}' identifier,
+				blob#>'{preservation_state}' preservation_state,
+				coalesce(blob#>'{data_catalog,identifier}', blob#>'{data_catalog}') data_catalog,
 				blob#>'{next_dataset_version,identifier}' "next",
 				blob#>'{deprecated}' deprecated,
 				(SELECT extids->$3 FROM identities WHERE uid = creator) AS creator,
