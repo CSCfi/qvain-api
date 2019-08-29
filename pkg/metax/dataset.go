@@ -168,6 +168,65 @@ func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) err
 		}
 	}
 
+	// catalog identifier can be either in data_catalog.identifier or directly as data_catalog
+	catalog := gjson.GetBytes(dataset.Blob(), "data_catalog.identifier").String()
+	if catalog == "" {
+		catalog = gjson.GetBytes(dataset.Blob(), "data_catalog").String()
+	}
+
+	// Checks that two (potentially nested) json values are equal. Normalizes the values
+	// by performing Unmarshal and Marshal for each value, and compares the resulting strings.
+	// The Marshal function sorts map keys so its output should be deterministic.
+	// Assumes there are no duplicate keys in objects.
+	checkEqualTree := func(jsonA string, jsonB string) error {
+		// since an empty string does not contain a JSON value, check it separately
+		if jsonA == "" || jsonB == "" {
+			if jsonA != jsonB {
+				return errors.New("content has been changed")
+			}
+			return nil
+		}
+
+		var a, b interface{}
+		err := json.Unmarshal([]byte(jsonA), &a)
+		if err != nil {
+			return err
+		}
+
+		err = json.Unmarshal([]byte(jsonB), &b)
+		if err != nil {
+			return err
+		}
+
+		normalizedA, err := json.Marshal(a)
+		if err != nil {
+			return err
+		}
+
+		normalizedB, err := json.Marshal(b)
+		if err != nil {
+			return err
+		}
+		if string(normalizedA) != string(normalizedB) {
+			return errors.New("content has been changed")
+		}
+		return nil
+	}
+
+	// Changing files or directories for old dataset versions or PAS datasets is forbidden
+	isPas := preservationState > 0 || catalog == "urn:nbn:fi:att:data-catalog-pas"
+	isOld := gjson.GetBytes(dataset.Blob(), "next_dataset_version.identifier").String() != ""
+	if isPas || isOld {
+		err := checkEqualTree(gjson.GetBytes(dataset.Blob(), "research_dataset.files").Raw, gjson.GetBytes(updated.Blob(), "research_dataset.files").Raw)
+		if err != nil {
+			return fmt.Errorf("files: %s", err.Error())
+		}
+		err = checkEqualTree(gjson.GetBytes(dataset.Blob(), "research_dataset.directories").Raw, gjson.GetBytes(updated.Blob(), "research_dataset.directories").Raw)
+		if err != nil {
+			return fmt.Errorf("directories: %s", err.Error())
+		}
+	}
+
 	return nil
 }
 

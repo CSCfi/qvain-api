@@ -140,7 +140,12 @@ func TestValidateUpdatedDataset(t *testing.T) {
 			"title":{"en":"Wonderful Title"},
 			"total_files_byte_size":200,
 			"preferred_identifier":"urn:nbn:fi:att:fe7ed696-2a60-4d0c-b707-ee02c2bcd616",
-			"metadata_version_identifier":"urn:nbn:fi:att:be138915-2b91-4dbe-91b0-8f4e72e816b4"
+			"metadata_version_identifier":"urn:nbn:fi:att:be138915-2b91-4dbe-91b0-8f4e72e816b4",
+			"directories":[{"directory_path":"/directory", "some_extra_thing": 10}],
+			"files":[
+				{"file_path":"/directory/file1"},
+				{"file_path":"/directory/file2"}
+			]
 		}
 	}`
 	unparsed := MetaxRawRecord{json.RawMessage(rawDataset)}
@@ -202,8 +207,46 @@ func TestValidateUpdatedDataset(t *testing.T) {
 		t.Fatalf("expected an error")
 	}
 
+	// change files
+	err = TestField(t, "research_dataset.files", []byte(`[{"file_path":"/directory/file3"}]`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// set catalog to PAS, which will prevent adding/removing files/directories
+	pasBlob, _ := sjson.SetRawBytes(metaxDataset.Blob(), "data_catalog", []byte(`{"id":3,"identifier":"urn:nbn:fi:att:data-catalog-pas"}`))
+	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
+
+	// change files
+	err = TestField(t, "research_dataset.files", []byte(`[{"file_path":"/directory/file3"}]`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// change order of files in array
+	err = TestField(t, "research_dataset.files", []byte(`[
+		{"file_path":"/directory/file2"},{"file_path":"/directory/file1"}
+	]`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// change value directory
+	err = TestField(t, "research_dataset.directories",
+		[]byte(`[{"directory_path":"/directory", "some_extra_thing": 12}]`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// change order of keys in directory object
+	err = TestField(t, "research_dataset.directories",
+		[]byte(`[{"some_extra_thing": 10, "directory_path":"/directory"}]`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
 	// add preservation state to metaxDataset
-	pasBlob, _ := sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`80`))
+	pasBlob, _ = sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`80`))
 	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
 
 	// if preservation_state >= 80, all updates should be forbidden
