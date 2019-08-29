@@ -182,7 +182,7 @@ func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) err
 		// since an empty string does not contain a JSON value, check it separately
 		if jsonA == "" || jsonB == "" {
 			if jsonA != jsonB {
-				return errors.New("content has been changed")
+				return errors.New("changes not allowed")
 			}
 			return nil
 		}
@@ -208,7 +208,7 @@ func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) err
 			return err
 		}
 		if string(normalizedA) != string(normalizedB) {
-			return errors.New("content has been changed")
+			return errors.New("changes not allowed")
 		}
 		return nil
 	}
