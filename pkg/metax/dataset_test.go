@@ -245,6 +245,13 @@ func TestValidateUpdatedDataset(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
+	// repeated keys in directory object, only the last one is taken into account
+		err = TestField(t, "research_dataset.directories",
+		[]byte(`[{"directory_path":"/directory", "some_extra_thing": 20, "some_extra_thing": 10}]`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
 	// add preservation state to metaxDataset
 	pasBlob, _ = sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`80`))
 	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)

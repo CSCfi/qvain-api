@@ -177,8 +177,7 @@ func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) err
 	// Checks that two (potentially nested) json values are equal. Normalizes the values
 	// by performing Unmarshal and Marshal for each value, and compares the resulting strings.
 	// The Marshal function sorts map keys so its output should be deterministic.
-	// Assumes there are no duplicate keys in objects.
-	checkEqualTree := func(jsonA string, jsonB string) error {
+	checkEqual := func(jsonA string, jsonB string) error {
 		// since an empty string does not contain a JSON value, check it separately
 		if jsonA == "" || jsonB == "" {
 			if jsonA != jsonB {
@@ -187,6 +186,8 @@ func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) err
 			return nil
 		}
 
+		// If there are duplicate keys in objects, performing json.Unmarshal into an interface{} will
+		// only use the last value, which is also how the PostgreSQL jsonb type behaves.
 		var a, b interface{}
 		err := json.Unmarshal([]byte(jsonA), &a)
 		if err != nil {
@@ -213,15 +214,15 @@ func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) err
 		return nil
 	}
 
-	// Changing files or directories for old dataset versions or PAS datasets is forbidden
+	// changing files or directories for old dataset versions or PAS datasets is forbidden
 	isPas := preservationState > 0 || catalog == "urn:nbn:fi:att:data-catalog-pas"
 	isOld := gjson.GetBytes(dataset.Blob(), "next_dataset_version.identifier").String() != ""
 	if isPas || isOld {
-		err := checkEqualTree(gjson.GetBytes(dataset.Blob(), "research_dataset.files").Raw, gjson.GetBytes(updated.Blob(), "research_dataset.files").Raw)
+		err := checkEqual(gjson.GetBytes(dataset.Blob(), "research_dataset.files").Raw, gjson.GetBytes(updated.Blob(), "research_dataset.files").Raw)
 		if err != nil {
 			return fmt.Errorf("files: %s", err.Error())
 		}
-		err = checkEqualTree(gjson.GetBytes(dataset.Blob(), "research_dataset.directories").Raw, gjson.GetBytes(updated.Blob(), "research_dataset.directories").Raw)
+		err = checkEqual(gjson.GetBytes(dataset.Blob(), "research_dataset.directories").Raw, gjson.GetBytes(updated.Blob(), "research_dataset.directories").Raw)
 		if err != nil {
 			return fmt.Errorf("directories: %s", err.Error())
 		}
