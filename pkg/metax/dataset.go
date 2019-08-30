@@ -149,7 +149,7 @@ func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) err
 
 	preservationState := gjson.GetBytes(dataset.Blob(), "preservation_state").Int()
 	if preservationState >= 80 {
-		return fmt.Errorf("cannot make changes to dataset with preservation_state => 80")
+		return fmt.Errorf("cannot make changes to dataset with preservation_state >= 80")
 	}
 
 	// readOnly fields from the schema

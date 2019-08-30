@@ -213,7 +213,7 @@ func TestValidateUpdatedDataset(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	// set catalog to PAS, which will prevent adding/removing files/directories
+	// set metaxDataset catalog to PAS, which will prevent altering files/directories
 	pasBlob, _ := sjson.SetRawBytes(metaxDataset.Blob(), "data_catalog", []byte(`{"id":3,"identifier":"urn:nbn:fi:att:data-catalog-pas"}`))
 	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
 
@@ -231,7 +231,7 @@ func TestValidateUpdatedDataset(t *testing.T) {
 		t.Fatalf("expected an error")
 	}
 
-	// change value directory
+	// change value of directory
 	err = TestField(t, "research_dataset.directories",
 		[]byte(`[{"directory_path":"/directory", "some_extra_thing": 12}]`))
 	if err == nil {
@@ -246,7 +246,7 @@ func TestValidateUpdatedDataset(t *testing.T) {
 	}
 
 	// repeated keys in directory object, only the last one is taken into account
-		err = TestField(t, "research_dataset.directories",
+	err = TestField(t, "research_dataset.directories",
 		[]byte(`[{"directory_path":"/directory", "some_extra_thing": 20, "some_extra_thing": 10}]`))
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
