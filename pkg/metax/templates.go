@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 )
 
-// These constants are used to identify the schema a dataset is using
+// These constants are used to identify the schema a dataset is using.
+// When creating a new dataset, the schema will also determine the catalog
+// the dataset belongs to.
 const (
 	SchemaIda = "metax-ida"
 	SchemaAtt = "metax-att"
