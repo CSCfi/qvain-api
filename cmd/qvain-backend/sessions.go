@@ -3,7 +3,6 @@ package main
 import (
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/CSCfi/qvain-api/internal/oidc"
 	"github.com/CSCfi/qvain-api/internal/psql"
@@ -17,35 +16,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const (
-	// projects are in `group_names` field
-	FairdataTokenProjectKey = "group_names"
-)
-
 var (
 	// FairdataTokenProjectPrefixes are used to identify IDA projects from group_names field
 	FairdataTokenProjectPrefixes = []string{"fairdata:IDA01:", "IDA01:"}
 )
-
-// MakeSessionHandlerForExternalService is a callback function that creates a session for a user of an external service.
-// It creates an application user account if one doesn't exist.
-func MakeSessionHandlerForExternalService(mgr *sessions.Manager, db *psql.DB, logger zerolog.Logger, svc string) func(http.ResponseWriter, *http.Request, string, time.Time) error {
-	return func(w http.ResponseWriter, r *http.Request, id string, exp time.Time) error {
-		logger.Debug().Str("svc", svc).Str("identity", id).Msg("session callback called")
-		uid, isNew, err := db.RegisterIdentity(svc, id)
-		if err != nil {
-			return err
-		}
-		sid, _ := mgr.NewLoginWithCookie(w, &uid, nil, sessions.WithExpiration(exp))
-		logger.Debug().Str("svc", svc).Str("identity", id).Str("uid", uid.String()).Bool("new", isNew).Msg("new session")
-
-		mgr.List(w)
-		session, err := mgr.Get(sid)
-		uidTest, _ := session.Uid()
-		logger.Debug().Str("sid", sid).Str("uid", uidTest.String()).Msg("get session")
-		return nil
-	}
-}
 
 // MakeSessionHandlerForFairdata is a callback function for the OIDC callback handler to glue token data and our own database to create a user session.
 // This particular version handles token fields specific to the Fairdata authentication proxy; see also generic version above.

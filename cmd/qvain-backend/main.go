@@ -71,10 +71,6 @@ func main() {
 	logger := config.NewLogger("main")
 	setStdlibLogger(config.NewLogger("log"))
 
-	if env.Get("APP_ENV_CHECK") == "" {
-		logger.Warn().Msg("environment variable APP_ENV_CHECK is not set")
-	}
-
 	// initialise database pool
 	err = config.initDB(config.NewLogger("psql"))
 	if err != nil {
@@ -93,17 +89,8 @@ func main() {
 		logger.Error().Err(err).Msg("secure messaging service initialisation failed")
 	}
 
-	// set up default handlers
-	mux := makeMux(config)
-	var handler http.Handler = mux
-	_ = handler
-
-	apis := NewApis(config)
-	_ = apis
-
 	// default server, without TLSConfig
 	srv := &http.Server{
-		//Handler:           authMux,
 		Handler:           Root(config),
 		ReadTimeout:       HttpReadTimeout,
 		ReadHeaderTimeout: HttpReadTimeout,

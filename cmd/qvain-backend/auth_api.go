@@ -39,7 +39,7 @@ func NewAuthApi(config *Config, onLogin loginHook, logger zerolog.Logger) *AuthA
 		config.oidcClientSecret,
 		"https://"+config.Hostname+"/api/auth/cb",
 		config.oidcProviderUrl,
-		"/token",
+		"/login",
 		oidc.WithAllowDevLogin(config.DevMode),
 		oidc.WithSkipExpiryCheck(config.DevMode),
 	)
@@ -77,7 +77,6 @@ func (api *AuthApi) authHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonError(w, "unknown authentication method", http.StatusNotFound)
-	return
 }
 
 // listProviders lists configured providers at the auth endpoint.

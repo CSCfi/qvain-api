@@ -56,9 +56,6 @@ func (api *LookupApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 	}
-
-	//jsonError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-	return
 }
 
 // Lookup queries the database for indexed identifiers and redirects the response to the relevant endpoint if found.
@@ -127,7 +124,6 @@ func (api *LookupApi) Lookup(w http.ResponseWriter, r *http.Request, field, valu
 		enc.AppendByte('}')
 		enc.Write()
 	}
-	return
 }
 
 // makeRedirURL makes a redirect URL to a given dataset's frontend or backend endpoint.

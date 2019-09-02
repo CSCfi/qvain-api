@@ -82,6 +82,21 @@ func checkProjectIdentifierArray(session *sessions.Session, a []interface{}) boo
 	return true
 }
 
+// checkProjectIdentifier checks project_identifiers in an array or map recursively.
+func checkProjectIdentifier(session *sessions.Session, obj interface{}) bool {
+	switch vv := obj.(type) {
+	case map[string]interface{}:
+		if !checkProjectIdentifierMap(session, vv) {
+			return false
+		}
+	case []interface{}:
+		if !checkProjectIdentifierArray(session, vv) {
+			return false
+		}
+	}
+	return true
+}
+
 // addPropertyToRequest adds a property to the root object of a json request,
 // or if the root is an array, to each of the objects in the array
 func addPropertyToRequest(r *http.Request, key string, value string) error {
@@ -144,7 +159,7 @@ func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) 
 		response.Body = ioutil.NopCloser(bytes.NewBuffer(body)) // make body readable again
 
 		// parse json
-		var data map[string]interface{}
+		var data interface{}
 		err = json.Unmarshal(body, &data)
 		if err != nil {
 			recorder := httptest.NewRecorder()
@@ -165,7 +180,7 @@ func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) 
 		}
 
 		// check response for project_identifier strings recursively
-		if !checkProjectIdentifierMap(session, data) {
+		if !checkProjectIdentifier(session, data) {
 			recorder := httptest.NewRecorder()
 			jsonError(recorder, "invalid project in response", http.StatusForbidden)
 			recorderToResponse(recorder, response)
