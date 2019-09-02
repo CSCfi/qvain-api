@@ -233,8 +233,8 @@ func (client *OidcClient) Callback() http.HandlerFunc {
 			}
 		}
 
-		// done; redirect to frontend with token in fragment
-		http.Redirect(w, r, client.frontendUrl+"#"+rawIDToken, http.StatusFound)
+		// done; redirect to frontend login url
+		http.Redirect(w, r, client.frontendUrl, http.StatusFound)
 	}
 }
 

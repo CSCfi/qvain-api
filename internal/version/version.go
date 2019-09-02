@@ -15,7 +15,7 @@ var (
 	Description = "Qvain API"
 
 	// semver string – set this manually
-	SemVer = "0.10.1"
+	SemVer = "0.10.2"
 
 	// nearest commit tag – set by linker
 	CommitTag = ""

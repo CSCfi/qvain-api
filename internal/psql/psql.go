@@ -4,9 +4,10 @@ package psql
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/jackc/pgx"
 	"github.com/rs/zerolog"
-	"time"
 )
 
 // DefaultPoolAcquireTimeout is the duration pgx waits for a connection to become available from the pool.

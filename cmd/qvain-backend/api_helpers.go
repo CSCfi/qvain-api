@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 
@@ -13,38 +14,10 @@ import (
 	"github.com/wvh/uuid"
 )
 
-// apiWriteHeaders points to a function writing either cors or no cors api responses.
-var apiWriteHeaders = apiWriteHeadersNoCors
-
-// enableCors sets api helper functions to CORS enabled versions.
-// It is not safe to call this function after starting the HTTP server.
-func enableCORS() {
-	apiWriteHeaders = apiWriteHeadersCorsAllowAll
-}
-
-// apiWriteHeadersNoCors writes standard header fields for all JSON api responses.
-func apiWriteHeadersNoCors(w http.ResponseWriter) {
+// apiWriteHeaders writes standard header fields for all JSON api responses.
+func apiWriteHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-}
-
-// apiWriteHeadersCorsAllowAll writes standard headers fields, allowing CORS from anywhere.
-func apiWriteHeadersCorsAllowAll(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Add("Vary", "Origin")
-}
-
-// apiWriteHeadersWithCache adds a caching header to the default api headers and writes them to the response.
-//
-// CC header values expressed in seconds:
-//   3600 (1h), 2592000 (30d), 31536000 (365d)
-// Example header:
-//   Cache-Control: public, max-age=31536000
-func apiWriteHeadersWithCache(w http.ResponseWriter, cc uint) {
-	apiWriteHeaders(w)
-	w.Header().Set("Cache-Control", "max-age=2592000") // 30d
 }
 
 // apiWriteOptions is a convenience function to add an OPTIONS response to API endpoints.
@@ -122,7 +95,6 @@ func smartError(w http.ResponseWriter, r *http.Request, msg string, status int) 
 		return
 	}
 	http.Error(w, msg, status)
-	return
 }
 
 // ifGet is a convenience function that serves http requests only if the method is GET.
@@ -154,23 +126,6 @@ func checkMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	return false
 }
 
-// apiHello catches all requests to the bare api endpoint.
-func apiHello(w http.ResponseWriter, r *http.Request) {
-	if r.RequestURI != "/api" && r.RequestURI != "/api/" {
-		jsonError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-
-	if r.Method != "GET" {
-		jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`"` + version.Id + ` api"` + "\n"))
-}
-
-// apiVersion returns the version information that was (hopefully) linked in at build time.
 func apiVersion(w http.ResponseWriter, r *http.Request) {
 	apiWriteHeaders(w)
 	w.Header().Set("ETag", `"`+version.CommitHash+`"`)
@@ -187,29 +142,6 @@ func apiVersion(w http.ResponseWriter, r *http.Request) {
 	enc.AddStringKey("repo", version.CommitRepo)
 	enc.AppendByte('}')
 	enc.Write()
-}
-
-func apiDatabaseCheck(db *psql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-			return
-		}
-
-		err := db.Check()
-
-		enc := gojay.BorrowEncoder(w)
-		defer enc.Release()
-
-		apiWriteHeaders(w)
-		enc.AppendByte('{')
-		enc.AddBoolKey("alive", err == nil)
-		if err != nil {
-			enc.AddStringKey("error", err.Error())
-		}
-		enc.AppendByte('}')
-		enc.Write()
-	})
 }
 
 // dbError handles database errors. It returns more specific API messages for predefined errors
@@ -331,4 +263,100 @@ func GetUuidParam(head string) (uuid.UUID, error) {
 
 func TrimSlash(s string) string {
 	return strings.TrimRight(s, "/")
+}
+
+// QueryParser provides helper functions for converting query parameters into Go types.
+type QueryParser struct {
+	query         url.Values
+	checkedParams map[string]bool
+	invalidParams []string
+}
+
+// NewQueryParser creates a new QueryParser for a query.
+func NewQueryParser(query url.Values) *QueryParser {
+	return &QueryParser{
+		query:         query,
+		checkedParams: map[string]bool{},
+		invalidParams: make([]string, 0),
+	}
+}
+
+// Flag returns true when param is "true" or is present but has no value.
+func (q *QueryParser) Flag(param string) bool {
+	q.checkedParams[param] = true
+	val, exists := q.query[param]
+	if !exists {
+		return false
+	}
+	if val[0] == "" || val[0] == "true" {
+		return true
+	}
+
+	q.invalidParams = append(q.invalidParams, param+"="+val[0])
+	return false
+}
+
+// TimeFilters converts parameters with a suffix and a (optionally truncated) RFC3339 time value into
+// an TimeFilter array representing time comparisons. See psql.ParseTimeFilter for further information.
+func (q *QueryParser) TimeFilters(param string) (filters []psql.TimeFilter) {
+	for suffix := range psql.ComparisonSuffixes {
+		q.checkedParams[param+suffix] = true
+		val, exists := q.query[param+suffix]
+		if !exists {
+			continue
+		}
+
+		if filter := psql.ParseTimeFilter(suffix, val[0]); !filter.IsZero() {
+			filters = append(filters, filter)
+		} else {
+			q.invalidParams = append(q.invalidParams, param+suffix+"="+val[0])
+		}
+	}
+
+	return filters
+}
+
+// String returns a string parameter.
+func (q *QueryParser) String(param string) string {
+	q.checkedParams[param] = true
+	val, exists := q.query[param]
+	if !exists {
+		return ""
+	}
+	return val[0]
+}
+
+// StringOption returns the string parameter only if it is a key in the options map.
+func (q *QueryParser) StringOption(param string, options map[string]string) string {
+	q.checkedParams[param] = true
+	val, exists := q.query[param]
+	if !exists {
+		return ""
+	}
+	_, isKey := options[val[0]]
+	if !isKey {
+		q.invalidParams = append(q.invalidParams, param+"="+val[0])
+		return ""
+	}
+	return val[0]
+}
+
+// Skip marks parameter as used but ignores its value.
+func (q *QueryParser) Skip(param string) {
+	q.checkedParams[param] = true
+}
+
+// Validate returns query parameters that either:
+// - have an invalid value
+// - have multiple values
+// - are unused
+func (q *QueryParser) Validate() (invalidParams []string) {
+	for param, values := range q.query {
+		if !q.checkedParams[param] {
+			q.invalidParams = append(q.invalidParams, param+" (unknown parameter)")
+		} else if len(values) > 1 {
+			q.invalidParams = append(q.invalidParams, param+" (multiple values)")
+		}
+	}
+	return q.invalidParams
 }

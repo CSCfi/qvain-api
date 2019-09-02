@@ -26,7 +26,6 @@ func Root(config *Config) http.Handler {
 		default:
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		}
-		return
 	})
 }
 
@@ -40,6 +39,7 @@ type Apis struct {
 	auth     *AuthApi
 	proxy    *ApiProxy
 	lookup   *LookupApi
+	stats    *StatsApi
 }
 
 // NewApis constructs a collection of APIs with a given configuration.
@@ -69,6 +69,7 @@ func NewApis(config *Config) *Apis {
 		config.DevMode,
 	)
 	apis.lookup = NewLookupApi(config.db)
+	apis.stats = NewStatsApi(config.db, config.NewLogger("stats"), config.qvainStatsApiKey, !config.DevMode)
 
 	return apis
 }
@@ -94,6 +95,9 @@ func (apis *Apis) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "lookup/":
 		lookupC.Add(1)
 		apis.lookup.ServeHTTP(w, r)
+	case "stats/":
+		statsC.Add(1)
+		apis.stats.ServeHTTP(w, r)
 	case "version":
 		versionC.Add(1)
 		ifGet(w, r, apiVersion)

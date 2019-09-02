@@ -26,6 +26,22 @@ func (db *DB) Create(dataset *models.Dataset) error {
 	return tx.Commit()
 }
 
+// CreateWithMetadata creates a new dataset with extra metadata instead of default values.
+func (db *DB) CreateWithMetadata(dataset *models.Dataset) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	err = tx.createWithMetadata(dataset)
+	if err != nil {
+		return handleError(err)
+	}
+
+	return tx.Commit()
+}
+
 // BatchStore takes a list of datasets and stores them as new datasets.
 func (db *DB) BatchStore(datasets []*models.Dataset) error {
 	tx, err := db.Begin()
@@ -217,6 +233,20 @@ func (tx *Tx) updateSyncedByService(id uuid.UUID) error {
 // internal update, service triggered
 func (tx *Tx) updateByService(id uuid.UUID, blob []byte) error {
 	ct, err := tx.Exec("UPDATE datasets SET synced = now(), modified = now(), seq = seq + 1, blob = $2 WHERE id = $1", id.Array(), blob)
+	if err != nil {
+		return err
+	}
+
+	if ct.RowsAffected() != 1 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// internal delete, service triggered
+func (tx *Tx) deleteByService(id uuid.UUID) error {
+	ct, err := tx.Exec(`DELETE FROM datasets WHERE id = $1`, id.Array())
 	if err != nil {
 		return err
 	}

@@ -42,13 +42,16 @@ type Config struct {
 	oidcClientID     string
 	oidcClientSecret string
 
+	// stats api settings
+	qvainStatsApiKey string
+
 	// configured service instances
 	db        *psql.DB
 	sessions  *sessions.Manager
 	messenger *secmsg.MessageService
 }
 
-// ConfigFromEnv() creates the application configuration by reading in environment variables.
+// ConfigFromEnv creates the application configuration by reading in environment variables.
 // If this function returns an error, it would be wise to exit the program with a non-zero exit code.
 func ConfigFromEnv() (*Config, error) {
 	// get hostname; refuse to start without one
@@ -66,9 +69,6 @@ func ConfigFromEnv() (*Config, error) {
 	if *appDevMode {
 		*appDebug = true
 		*forceHttpOnly = true
-
-		// slight hack: if in dev mode, set default API headers to include CORS allow all
-		enableCORS()
 
 		// create fake session
 		if env.Get("APP_DEV_USER") != "" {
@@ -100,6 +100,7 @@ func ConfigFromEnv() (*Config, error) {
 		MetaxApiHost:     env.Get("APP_METAX_API_HOST"),
 		metaxApiUser:     env.Get("APP_METAX_API_USER"),
 		metaxApiPass:     env.Get("APP_METAX_API_PASS"),
+		qvainStatsApiKey: env.Get("APP_QVAIN_STATS_API_KEY"),
 	}, nil
 }
 
@@ -146,16 +147,6 @@ func getHostname() (string, error) {
 	}
 
 	return "", err
-}
-
-// getScheme sets the URL scheme used for links and redirects.
-// It is used to enforce non-SSL links for local development where we don't have certificates.
-func getScheme() string {
-	if env.GetBool("APP_FORCE_HTTP_SCHEME") {
-		return "http://"
-	}
-
-	return "https://"
 }
 
 // getTokenKey gets the token secret in hex from the environment and decodes it.
