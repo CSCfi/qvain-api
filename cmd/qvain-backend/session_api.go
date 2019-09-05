@@ -29,7 +29,7 @@ func (api *SessionApi) Current(w http.ResponseWriter, r *http.Request) {
 	session, err := api.sessions.SessionFromRequest(r)
 	if err != nil {
 		api.logger.Debug().Err(err).Msg("no current session")
-		sessionError(w, sessions.ErrSessionNotFound)
+		sessionError(w, sessions.ErrSessionNotFound, &api.logger)
 		return
 	}
 
@@ -39,8 +39,7 @@ func (api *SessionApi) Current(w http.ResponseWriter, r *http.Request) {
 	apiWriteHeaders(w)
 	err = enc.EncodeObject(session.Public())
 	if err != nil {
-		api.logger.Error().Err(err).Msg("failed to encode public session")
-		jsonError(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		loggedJSONError(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError, &api.logger).Err(err).Msg("failed to encode public session")
 		return
 	}
 }
@@ -79,7 +78,7 @@ func (api *SessionApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodOptions:
 			apiWriteOptions(w, "GET, OPTIONS")
 		default:
-			jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			loggedJSONError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed, &api.logger).Msg("error in method serveHTTP")
 		}
 	case "logout":
 		switch r.Method {
@@ -88,7 +87,7 @@ func (api *SessionApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodOptions:
 			apiWriteOptions(w, "POST, OPTIONS")
 		default:
-			jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			loggedJSONError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed, &api.logger).Msg("error in method serveHTTP")
 		}
 	}
 }

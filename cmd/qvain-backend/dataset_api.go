@@ -47,8 +47,7 @@ func (api *DatasetApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// authenticated api
 	session, err := api.sessions.SessionFromRequest(r)
 	if err != nil {
-		api.logger.Error().Err(err).Msg("no session from request")
-		jsonError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		loggedJSONError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized, &api.logger).Err(err).Msg("no session from request")
 		return
 	}
 
@@ -69,7 +68,7 @@ func (api *DatasetApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			apiWriteOptions(w, "GET, POST, OPTIONS")
 			return
 		default:
-			jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			loggedJSONError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed, &api.logger).Msg("Error in serveHttp")
 		}
 		return
 	}
@@ -77,7 +76,7 @@ func (api *DatasetApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// dataset uuid
 	id, err := GetUuidParam(head)
 	if err != nil {
-		jsonError(w, "bad format for uuid path parameter", http.StatusBadRequest)
+		loggedJSONError(w, "bad format for uuid path parameter", http.StatusBadRequest, &api.logger).Err(err).Msg("Error while getting dataset uuid")
 		return
 	}
 
@@ -93,7 +92,7 @@ func (api *DatasetApi) ListDatasets(w http.ResponseWriter, r *http.Request, user
 		err := shared.Fetch(api.metax, api.db, api.logger, user.Uid, user.Identity)
 		if err != nil {
 			// TODO: handle mixed error
-			jsonError(w, err.Error(), http.StatusBadRequest)
+			loggedJSONError(w, err.Error(), http.StatusBadRequest, &api.logger).Err(err).Msg("Error while listing dataset")
 			//dbError(w, err)
 			return
 		}
@@ -101,14 +100,13 @@ func (api *DatasetApi) ListDatasets(w http.ResponseWriter, r *http.Request, user
 		api.logger.Debug().Str("op", "fetchall").Msg("datasets")
 		shared.FetchAll(api.metax, api.db, api.logger, user.Uid, user.Identity)
 	default:
-		jsonError(w, "invalid parameter", http.StatusBadRequest)
+		loggedJSONError(w, "invalid parameter", http.StatusBadRequest, &api.logger).Msg("Error while listing Datasets")
 		return
 	}
 
 	jsondata, err := api.db.ViewDatasetsByOwner(user.Uid)
 	if err != nil {
-		api.logger.Error().Err(err).Str("uid", user.Uid.String()).Msg("error listing datasets")
-		dbError(w, err)
+		dbError(w, err, &api.logger).Err(err).Str("uid", user.Uid.String()).Msg("error listing datasets")
 		return
 	}
 
@@ -119,7 +117,7 @@ func (api *DatasetApi) ListDatasets(w http.ResponseWriter, r *http.Request, user
 
 // Dataset handles requests for a dataset by UUID. It dispatches to request method specific handlers.
 func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *models.User, id uuid.UUID) {
-	//api.logger.Debug().Str("head", "").Str("path", r.URL.Path).Msg("dataset")
+	api.logger.Debug().Str("head", "").Str("path", r.URL.Path).Msg("dataset")
 	hasTrailing := r.URL.Path == "/"
 	op := ShiftUrlWithTrailing(r)
 	api.logger.Debug().Bool("hasTrailing", hasTrailing).Str("head", op).Str("path", r.URL.Path).Str("dataset", id.String()).Msg("dataset")
@@ -142,7 +140,7 @@ func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *mod
 			return
 
 		default:
-			jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			loggedJSONError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed, &api.logger).Msg("Error in Dataset method dispach")
 			return
 		}
 	}
@@ -151,7 +149,7 @@ func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *mod
 	switch op {
 	case "export":
 		// TODO: assess security implementations before enabling this
-		jsonError(w, "export not implemented", http.StatusNotImplemented)
+		loggedJSONError(w, "export not implemented", http.StatusNotImplemented, &api.logger).Msg("Error in Dataset method dispatch")
 		return
 	case "versions":
 		if checkMethod(w, r, http.MethodGet) {
@@ -164,7 +162,7 @@ func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *mod
 		}
 		return
 	default:
-		jsonError(w, "invalid dataset operation", http.StatusNotFound)
+		loggedJSONError(w, "invalid dataset operation", http.StatusNotFound, &api.logger).Msg("Error in Dataset method dispatch")
 		return
 	}
 }
@@ -180,7 +178,8 @@ func (api *DatasetApi) getDataset(w http.ResponseWriter, r *http.Request, owner 
 	}
 
 	res, err := api.db.ViewDatasetWithOwner(id, owner, api.identity)
-	if dbError(w, err) {
+	if err != nil {
+		dbError(w, err, &api.logger).Err(err).Str("dataset", id.String()).Str("user", owner.String()).Msg("retrieval of dataset failed")
 		return
 	}
 
@@ -192,12 +191,12 @@ func (api *DatasetApi) createDataset(w http.ResponseWriter, r *http.Request, cre
 	var err error
 
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		jsonError(w, http.StatusText(http.StatusUnsupportedMediaType), http.StatusUnsupportedMediaType)
+		loggedJSONError(w, http.StatusText(http.StatusUnsupportedMediaType), http.StatusUnsupportedMediaType, &api.logger).Msg("Error in create Dataset")
 		return
 	}
 
 	if r.Body == nil || r.Body == http.NoBody {
-		jsonError(w, "empty body", http.StatusBadRequest)
+		loggedJSONError(w, "empty body", http.StatusBadRequest, &api.logger).Msg("Error in create Dataset")
 		return
 	}
 
@@ -205,15 +204,14 @@ func (api *DatasetApi) createDataset(w http.ResponseWriter, r *http.Request, cre
 
 	typed, err := models.CreateDatasetFromJson(creator.Uid, r.Body, map[string]string{"identity": creator.Identity, "org": creator.Organisation})
 	if err != nil {
-		api.logger.Error().Err(err).Msg("create dataset failed")
-		jsonError(w, err.Error(), http.StatusBadRequest)
+		loggedJSONError(w, err.Error(), http.StatusBadRequest, &api.logger).Err(err).Msg("create dataset failed")
 		return
 	}
 
 	err = api.db.Create(typed.Unwrap())
 	if err != nil {
 		//jsonError(w, "store failed", http.StatusBadRequest)
-		dbError(w, err)
+		dbError(w, err, &api.logger).Err(err).Msg("Creation of dataset failed")
 		return
 	}
 
@@ -224,12 +222,12 @@ func (api *DatasetApi) updateDataset(w http.ResponseWriter, r *http.Request, own
 	var err error
 
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		jsonError(w, http.StatusText(http.StatusUnsupportedMediaType), http.StatusUnsupportedMediaType)
+		loggedJSONError(w, http.StatusText(http.StatusUnsupportedMediaType), http.StatusUnsupportedMediaType, &api.logger).Str("dataset id", id.String()).Msg("Update dataset failed")
 		return
 	}
 
 	if r.Body == nil || r.Body == http.NoBody {
-		jsonError(w, "empty body", http.StatusBadRequest)
+		loggedJSONError(w, "empty body", http.StatusBadRequest, &api.logger).Str("dataset id", id.String()).Msg("Update Dataset failed")
 		return
 	}
 
@@ -238,7 +236,7 @@ func (api *DatasetApi) updateDataset(w http.ResponseWriter, r *http.Request, own
 	typed, err := models.UpdateDatasetFromJson(owner.Uid, r.Body, nil)
 	if err != nil {
 		api.logger.Error().Err(err).Str("dataset", id.String()).Str("user", owner.Uid.String()).Msg("update dataset failed")
-		jsonError(w, err.Error(), http.StatusBadRequest)
+		loggedJSONError(w, err.Error(), http.StatusBadRequest, &api.logger).Err(err).Str("dataset", id.String()).Str("user", owner.Uid.String()).Msg("update dataset failed")
 		return
 	}
 
@@ -249,21 +247,21 @@ func (api *DatasetApi) updateDataset(w http.ResponseWriter, r *http.Request, own
 	// perform checks on the updated dataset before saving it
 	dataset, err := api.db.GetWithOwner(id, owner.Uid)
 	if err != nil {
-		dbError(w, err)
+		dbError(w, err, &api.logger).Err(err).Str("Dataset id", id.String()).Str("Owner Uid", owner.Uid.String()).Msg("Update dataset failed")
 		return
 	}
 	if dataset.Family() == metax.MetaxDatasetFamily {
 		metaxDataset := &metax.MetaxDataset{Dataset: dataset}
 		err = metaxDataset.ValidateUpdatedDataset(typed.Unwrap())
 		if err != nil {
-			jsonError(w, err.Error(), http.StatusBadRequest)
+			loggedJSONError(w, err.Error(), http.StatusBadRequest, &api.logger).Err(err).Msg("Error while updating dataset")
 			return
 		}
 	}
 
 	err = api.db.SmartUpdateWithOwner(id, typed.Unwrap().Blob(), owner.Uid)
 	if err != nil {
-		dbError(w, err)
+		dbError(w, err, &api.logger).Err(err).Str("dataset", id.String()).Str("user", owner.Uid.String()).Msg("SmartUpdateWithOwner failed")
 		return
 	}
 
@@ -276,11 +274,9 @@ func (api *DatasetApi) handlePublishError(w http.ResponseWriter, ownerId uuid.UU
 		api.logger.Warn().Err(err).Str("dataset", id.String()).Str("owner", ownerId.String()).Str("origin", "api").Msg("publish failed")
 		jsonErrorWithPayload(w, t.Error(), "metax", t.OriginalError(), convertExternalStatusCode(t.StatusCode()))
 	case *psql.DatabaseError:
-		api.logger.Error().Err(err).Str("dataset", id.String()).Str("owner", ownerId.String()).Str("origin", "database").Msg("publish failed")
-		dbError(w, err)
+		dbError(w, err, &api.logger).Err(err).Str("dataset", id.String()).Str("owner", ownerId.String()).Str("origin", "database").Msg("publish failed")
 	default:
-		api.logger.Error().Err(err).Str("dataset", id.String()).Str("owner", ownerId.String()).Str("origin", "other").Msg("publish failed")
-		jsonError(w, err.Error(), http.StatusInternalServerError)
+		loggedJSONError(w, err.Error(), http.StatusInternalServerError, &api.logger).Err(err).Str("dataset", id.String()).Str("owner", ownerId.String()).Str("origin", "other").Msg("publish failed")
 	}
 }
 
@@ -296,7 +292,8 @@ func (api *DatasetApi) publishDataset(w http.ResponseWriter, r *http.Request, ow
 
 func (api *DatasetApi) deleteDataset(w http.ResponseWriter, r *http.Request, owner uuid.UUID, id uuid.UUID) {
 	dataset, err := api.db.GetWithOwner(id, owner)
-	if dbError(w, err) {
+	if err != nil {
+		dbError(w, err, &api.logger).Err(err).Str("dataset", id.String()).Str("user", owner.String()).Msg("deletion of dataset failed")
 		return
 	}
 
@@ -309,7 +306,8 @@ func (api *DatasetApi) deleteDataset(w http.ResponseWriter, r *http.Request, own
 	} else {
 		err = api.db.Delete(id, &owner)
 		if err != nil {
-			dbError(w, err)
+			dbError(w, err, &api.logger).Err(err).Str("dataset", id.String()).Str("user", owner.String()).Msg("deletion of dataset failed")
+			return
 		}
 	}
 
@@ -322,8 +320,7 @@ func (api *DatasetApi) deleteDataset(w http.ResponseWriter, r *http.Request, own
 func (api *DatasetApi) ListVersions(w http.ResponseWriter, r *http.Request, user uuid.UUID, id uuid.UUID) {
 	jsondata, err := api.db.ViewVersions(user, id)
 	if err != nil {
-		api.logger.Error().Err(err).Str("uid", user.String()).Str("dataset", id.String()).Msg("error getting versions")
-		dbError(w, err)
+		dbError(w, err, &api.logger).Err(err).Str("uid", user.String()).Str("dataset", id.String()).Msg("error getting versions")
 		return
 	}
 
