@@ -146,6 +146,51 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 	return record, nil
 }
 
+// ViewDatasetInfoByIdentifer gives basic information for a single dataset with a given external identifier.
+func (db *DB) ViewDatasetInfoByIdentifier(identifierType string, identifier string, svc string) (json.RawMessage, error) {
+	var record json.RawMessage
+
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var where string
+	switch identifierType {
+	case "id": // qvain id
+		where = `blob#>>'{identifier}' = $1`
+	case "identifier": // external id
+		where = `id = $1`
+	default:
+		return nil, fmt.Errorf("invalid identifierType")
+	}
+
+	err = tx.QueryRow(`
+	SELECT row_to_json(result) "record"
+	FROM (
+		SELECT id, owner, created, modified, synced, seq, published, schema,
+				blob#>'{identifier}' identifier,
+				blob#>'{research_dataset,title}' title,
+				blob#>'{research_dataset,description}' description,
+				blob#>'{preservation_state}' preservation_state,
+				coalesce(blob#>'{data_catalog,identifier}', blob#>'{data_catalog}') data_catalog,
+				blob#>'{previous_dataset_version,identifier}' previous,
+				blob#>'{next_dataset_version,identifier}' "next",
+				blob#>'{deprecated}' deprecated,
+				jsonb_array_length(coalesce(blob#>'{dataset_version_set}', '[]')) versions,
+				(SELECT extids->$2 FROM identities WHERE uid = creator) AS ext_creator,
+				(SELECT extids->$2 FROM identities WHERE uid = owner) AS ext_owner
+			FROM datasets
+		WHERE `+where+` ) result
+	`, identifier, svc).Scan(&record)
+	if err != nil {
+		return nil, handleError(err)
+	}
+
+	return record, nil
+}
+
 func (db *DB) ExportAsJson(id uuid.UUID) (json.RawMessage, error) {
 	var dataset json.RawMessage
 

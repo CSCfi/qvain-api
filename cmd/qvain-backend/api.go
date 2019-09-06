@@ -53,7 +53,8 @@ func NewApis(config *Config) *Apis {
 		metax.WithCredentials(config.metaxApiUser, config.metaxApiPass),
 		metax.WithInsecureCertificates(config.DevMode))
 
-	apis.datasets = NewDatasetApi(config.db, config.sessions, metax, config.NewLogger("datasets"))
+	apis.datasets = NewDatasetApi(config.db, config.sessions, metax,
+		config.NewLogger("datasets"), config.qvainDatasetApiKey)
 	apis.sessions = NewSessionApi(
 		config.sessions,
 		config.NewLogger("sessions"),

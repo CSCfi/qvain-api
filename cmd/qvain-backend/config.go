@@ -43,7 +43,8 @@ type Config struct {
 	oidcClientSecret string
 
 	// stats api settings
-	qvainStatsApiKey string
+	qvainStatsApiKey   string
+	qvainDatasetApiKey string
 
 	// configured service instances
 	db        *psql.DB
@@ -82,25 +83,26 @@ func ConfigFromEnv() (*Config, error) {
 	}
 
 	return &Config{
-		Hostname:         hostname,
-		Port:             *appHttpPort,
-		Standalone:       env.GetBool("APP_HTTP_STANDALONE"),
-		ForceHttpOnly:    *forceHttpOnly,
-		Debug:            *appDebug,
-		DevMode:          *appDevMode,
-		Logging:          !*disableLogging,
-		LogRequests:      !*disableHttpLog,
-		Logger:           createAppLogger(ServiceName, *appDebug, *disableLogging),
-		UseHttpErrors:    env.GetBool("APP_HTTP_ERRORS"),
-		tokenKey:         key,
-		oidcProviderName: env.Get("APP_OIDC_PROVIDER_NAME"),
-		oidcProviderUrl:  env.Get("APP_OIDC_PROVIDER_URL"),
-		oidcClientID:     env.Get("APP_OIDC_CLIENT_ID"),
-		oidcClientSecret: env.Get("APP_OIDC_CLIENT_SECRET"),
-		MetaxApiHost:     env.Get("APP_METAX_API_HOST"),
-		metaxApiUser:     env.Get("APP_METAX_API_USER"),
-		metaxApiPass:     env.Get("APP_METAX_API_PASS"),
-		qvainStatsApiKey: env.Get("APP_QVAIN_STATS_API_KEY"),
+		Hostname:           hostname,
+		Port:               *appHttpPort,
+		Standalone:         env.GetBool("APP_HTTP_STANDALONE"),
+		ForceHttpOnly:      *forceHttpOnly,
+		Debug:              *appDebug,
+		DevMode:            *appDevMode,
+		Logging:            !*disableLogging,
+		LogRequests:        !*disableHttpLog,
+		Logger:             createAppLogger(ServiceName, *appDebug, *disableLogging),
+		UseHttpErrors:      env.GetBool("APP_HTTP_ERRORS"),
+		tokenKey:           key,
+		oidcProviderName:   env.Get("APP_OIDC_PROVIDER_NAME"),
+		oidcProviderUrl:    env.Get("APP_OIDC_PROVIDER_URL"),
+		oidcClientID:       env.Get("APP_OIDC_CLIENT_ID"),
+		oidcClientSecret:   env.Get("APP_OIDC_CLIENT_SECRET"),
+		MetaxApiHost:       env.Get("APP_METAX_API_HOST"),
+		metaxApiUser:       env.Get("APP_METAX_API_USER"),
+		metaxApiPass:       env.Get("APP_METAX_API_PASS"),
+		qvainStatsApiKey:   env.Get("APP_QVAIN_STATS_API_KEY"),
+		qvainDatasetApiKey: env.Get("APP_QVAIN_DATASET_API_KEY"),
 	}, nil
 }
 
