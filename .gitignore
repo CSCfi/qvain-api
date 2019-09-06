@@ -13,3 +13,6 @@
 *.kate-swp
 *.test
 *.out
+
+# editors
+.vscode
