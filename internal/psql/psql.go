@@ -6,6 +6,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/wvh/uuid"
+
 	"github.com/jackc/pgx"
 	"github.com/rs/zerolog"
 )
@@ -149,6 +151,18 @@ func (psql *DB) Log(plevel pgx.LogLevel, msg string, data map[string]interface{}
 		zlevel = zerolog.DebugLevel
 	default:
 		zlevel = zerolog.DebugLevel
+	}
+
+	// replace uuid byte array in query args with hex-encoded version
+	if args, ok := data["args"].([]interface{}); ok {
+		for idx, val := range args {
+			if bytes, ok := val.(*[16]uint8); ok {
+				uid, err := uuid.FromBytes(bytes[:])
+				if err == nil {
+					args[idx] = uid.String()
+				}
+			}
+		}
 	}
 
 	pgxlog := psql.logger.With().Fields(data).Logger()
