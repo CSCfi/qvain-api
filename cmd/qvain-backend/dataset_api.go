@@ -23,6 +23,7 @@ type DatasetApi struct {
 	sessions *sessions.Manager
 	metax    *metax.MetaxService
 	logger   zerolog.Logger
+
 	identity string
 }
 
@@ -43,10 +44,7 @@ func (api *DatasetApi) SetIdentity(identity string) {
 }
 
 func (api *DatasetApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	head := ShiftUrlWithTrailing(r)
-	api.logger.Debug().Str("head", head).Str("path", r.URL.Path).Str("method", r.Method).Msg("datasets")
-
-	// allow only authenticated users
+	// authenticated api
 	session, err := api.sessions.SessionFromRequest(r)
 	if err != nil {
 		api.logger.Error().Err(err).Msg("no session from request")
@@ -55,6 +53,9 @@ func (api *DatasetApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := session.User
+
+	head := ShiftUrlWithTrailing(r)
+	api.logger.Debug().Str("head", head).Str("path", r.URL.Path).Str("method", r.Method).Msg("datasets")
 
 	// root
 	if head == "" {

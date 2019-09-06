@@ -147,7 +147,7 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 }
 
 // ViewDatasetInfoByIdentifer gives basic information for a single dataset with a given external identifier.
-func (db *DB) ViewDatasetInfoByIdentifier(identifierType string, identifier string, svc string) (json.RawMessage, error) {
+func (db *DB) ViewDatasetInfoByIdentifier(identifierType string, identifier string) (json.RawMessage, error) {
 	var record json.RawMessage
 
 	tx, err := db.Begin()
@@ -178,12 +178,10 @@ func (db *DB) ViewDatasetInfoByIdentifier(identifierType string, identifier stri
 				blob#>'{previous_dataset_version,identifier}' previous,
 				blob#>'{next_dataset_version,identifier}' "next",
 				blob#>'{deprecated}' deprecated,
-				jsonb_array_length(coalesce(blob#>'{dataset_version_set}', '[]')) versions,
-				(SELECT extids->$2 FROM identities WHERE uid = creator) AS ext_creator,
-				(SELECT extids->$2 FROM identities WHERE uid = owner) AS ext_owner
+				jsonb_array_length(coalesce(blob#>'{dataset_version_set}', '[]')) versions
 			FROM datasets
 		WHERE `+where+` ) result
-	`, identifier, svc).Scan(&record)
+	`, identifier).Scan(&record)
 	if err != nil {
 		return nil, handleError(err)
 	}

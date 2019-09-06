@@ -10,19 +10,17 @@ import (
 
 // LookupApi holds the configuration for the identifier lookup service.
 type LookupApi struct {
-	db       *psql.DB
-	logger   zerolog.Logger
-	identity string
-	apiKey   string
+	db     *psql.DB
+	logger zerolog.Logger
+	apiKey string
 }
 
 // NewLookupApi sets up a dataset lookup service.
 func NewLookupApi(db *psql.DB, logger zerolog.Logger, apiKey string) *LookupApi {
 	return &LookupApi{
-		db:       db,
-		logger:   logger,
-		identity: DefaultIdentity,
-		apiKey:   apiKey,
+		db:     db,
+		logger: logger,
+		apiKey: apiKey,
 	}
 }
 
@@ -78,9 +76,9 @@ func (api *LookupApi) Dataset(w http.ResponseWriter, r *http.Request) {
 		err error
 	)
 	if id != "" {
-		res, err = api.db.ViewDatasetInfoByIdentifier("id", id, api.identity)
+		res, err = api.db.ViewDatasetInfoByIdentifier("id", id)
 	} else if identifier != "" {
-		res, err = api.db.ViewDatasetInfoByIdentifier("identifier", identifier, api.identity)
+		res, err = api.db.ViewDatasetInfoByIdentifier("identifier", identifier)
 	}
 	if err != nil {
 		dbError(w, err)
