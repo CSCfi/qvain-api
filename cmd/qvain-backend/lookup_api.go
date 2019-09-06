@@ -62,7 +62,7 @@ func (api *LookupApi) Dataset(w http.ResponseWriter, r *http.Request) {
 	metaxId := r.URL.Query().Get("metax_id") // metax identifier of the dataset
 
 	if qvainId == "" && metaxId == "" {
-		jsonError(w, "missing either 'qvain_id' or 'metax_id' in query", http.StatusBadRequest)
+		jsonError(w, "either 'qvain_id' or 'metax_id' required in query", http.StatusBadRequest)
 		return
 	}
 
