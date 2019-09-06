@@ -53,8 +53,7 @@ func NewApis(config *Config) *Apis {
 		metax.WithCredentials(config.metaxApiUser, config.metaxApiPass),
 		metax.WithInsecureCertificates(config.DevMode))
 
-	apis.datasets = NewDatasetApi(config.db, config.sessions, metax,
-		config.NewLogger("datasets"), config.qvainDatasetApiKey)
+	apis.datasets = NewDatasetApi(config.db, config.sessions, metax, config.NewLogger("datasets"))
 	apis.sessions = NewSessionApi(
 		config.sessions,
 		config.NewLogger("sessions"),
@@ -69,7 +68,7 @@ func NewApis(config *Config) *Apis {
 		config.NewLogger("proxy"),
 		config.DevMode,
 	)
-	apis.lookup = NewLookupApi(config.db)
+	apis.lookup = NewLookupApi(config.db, config.NewLogger("lookup"), config.qvainLookupApiKey)
 	apis.stats = NewStatsApi(config.db, config.NewLogger("stats"), config.qvainStatsApiKey, !config.DevMode)
 
 	return apis

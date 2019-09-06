@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -25,17 +24,15 @@ type DatasetApi struct {
 	metax    *metax.MetaxService
 	logger   zerolog.Logger
 	identity string
-	apiKey   string
 }
 
-func NewDatasetApi(db *psql.DB, sessions *sessions.Manager, metax *metax.MetaxService, logger zerolog.Logger, apiKey string) *DatasetApi {
+func NewDatasetApi(db *psql.DB, sessions *sessions.Manager, metax *metax.MetaxService, logger zerolog.Logger) *DatasetApi {
 	return &DatasetApi{
 		db:       db,
 		sessions: sessions,
 		metax:    metax,
 		logger:   logger,
 		identity: DefaultIdentity,
-		apiKey:   apiKey,
 	}
 }
 
@@ -49,21 +46,7 @@ func (api *DatasetApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	head := ShiftUrlWithTrailing(r)
 	api.logger.Debug().Str("head", head).Str("path", r.URL.Path).Str("method", r.Method).Msg("datasets")
 
-	key := r.URL.Query().Get("key")
-	if key != "" {
-		if key != api.apiKey {
-			jsonError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-			api.logger.Error().Msg("invalid api key")
-			return
-		}
-
-		if head == "info" {
-			api.DatasetInfo(w, r)
-			return
-		}
-	}
-
-	// authenticated api
+	// allow only authenticated users
 	session, err := api.sessions.SessionFromRequest(r)
 	if err != nil {
 		api.logger.Error().Err(err).Msg("no session from request")
@@ -131,49 +114,6 @@ func (api *DatasetApi) ListDatasets(w http.ResponseWriter, r *http.Request, user
 	apiWriteHeaders(w)
 	//w.Header().Set("Cache-Control", "private, max-age=300")
 	w.Write(jsondata)
-}
-
-// DatasetInfo gets information for a single dataset.
-func (api *DatasetApi) DatasetInfo(w http.ResponseWriter, r *http.Request) {
-	hasTrailing := r.URL.Path == "/"
-	head := ShiftUrlWithTrailing(r)
-	api.logger.Debug().Bool("hasTrailing", hasTrailing).Str("path", r.URL.Path)
-
-	if head != "" || hasTrailing {
-		jsonError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-
-	id := r.URL.Query().Get("id")                 // qvain id of the dataset
-	identifier := r.URL.Query().Get("identifier") // external (Metax) identifier of the dataset
-
-	if id == "" && identifier == "" {
-		jsonError(w, "missing either 'id' or 'identifier' in query", http.StatusBadRequest)
-		return
-	}
-
-	if id != "" && identifier != "" {
-		jsonError(w, "both 'id' and 'identifier' in query", http.StatusBadRequest)
-		return
-	}
-
-	var (
-		res json.RawMessage
-		err error
-	)
-	if id != "" {
-		res, err = api.db.ViewDatasetInfoByIdentifier("id", id, api.identity)
-	} else if identifier != "" {
-		res, err = api.db.ViewDatasetInfoByIdentifier("identifier", identifier, api.identity)
-	}
-	if err != nil {
-		dbError(w, err)
-		api.logger.Error().Msg("error retrieving dataset info")
-		return
-	}
-
-	apiWriteHeaders(w)
-	w.Write(res)
 }
 
 // Dataset handles requests for a dataset by UUID. It dispatches to request method specific handlers.
