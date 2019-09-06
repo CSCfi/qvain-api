@@ -159,9 +159,9 @@ func (db *DB) ViewDatasetInfoByIdentifier(identifierType string, identifier stri
 	var where string
 	switch identifierType {
 	case "id": // qvain id
-		where = `blob#>>'{identifier}' = $1`
-	case "identifier": // external id
 		where = `id = $1`
+	case "identifier": // external id
+		where = `blob#>>'{identifier}' = $1`
 	default:
 		return nil, fmt.Errorf("invalid identifierType")
 	}
