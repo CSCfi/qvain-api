@@ -8,14 +8,14 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// LookupApi holds the configuration for the identifier lookup service.
+// LookupApi holds the configuration for the lookup API.
 type LookupApi struct {
 	db     *psql.DB
 	logger zerolog.Logger
 	apiKey string
 }
 
-// NewLookupApi sets up a dataset lookup service.
+// NewLookupApi sets up a lookup API.
 func NewLookupApi(db *psql.DB, logger zerolog.Logger, apiKey string) *LookupApi {
 	return &LookupApi{
 		db:     db,
@@ -47,7 +47,7 @@ func (api *LookupApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 }
 
-// Dataset gets information for a single dataset.
+// Dataset retrieves information for a single dataset.
 func (api *LookupApi) Dataset(w http.ResponseWriter, r *http.Request) {
 	hasTrailing := r.URL.Path == "/"
 	head := ShiftUrlWithTrailing(r)

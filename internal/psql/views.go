@@ -146,7 +146,7 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 	return record, nil
 }
 
-// ViewDatasetInfoByIdentifer gives basic information for a single dataset with a given external identifier.
+// ViewDatasetInfoByIdentifer gives basic information for a single dataset with a given identifier.
 func (db *DB) ViewDatasetInfoByIdentifier(identifierType string, identifier string) (json.RawMessage, error) {
 	var record json.RawMessage
 
