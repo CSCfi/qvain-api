@@ -44,7 +44,7 @@ func (api *LookupApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+	jsonError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
 
 // Dataset retrieves information for a single dataset.
@@ -58,16 +58,16 @@ func (api *LookupApi) Dataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := r.URL.Query().Get("id")                 // qvain id of the dataset
-	identifier := r.URL.Query().Get("identifier") // external (Metax) identifier of the dataset
+	qvainId := r.URL.Query().Get("qvain_id") // qvain id of the dataset
+	metaxId := r.URL.Query().Get("metax_id") // metax identifier of the dataset
 
-	if id == "" && identifier == "" {
-		jsonError(w, "missing either 'id' or 'identifier' in query", http.StatusBadRequest)
+	if qvainId == "" && metaxId == "" {
+		jsonError(w, "missing either 'qvain_id' or 'metax_id' in query", http.StatusBadRequest)
 		return
 	}
 
-	if id != "" && identifier != "" {
-		jsonError(w, "both 'id' and 'identifier' in query", http.StatusBadRequest)
+	if qvainId != "" && metaxId != "" {
+		jsonError(w, "both 'qvain_id' and 'metax_id' in query", http.StatusBadRequest)
 		return
 	}
 
@@ -75,10 +75,10 @@ func (api *LookupApi) Dataset(w http.ResponseWriter, r *http.Request) {
 		res json.RawMessage
 		err error
 	)
-	if id != "" {
-		res, err = api.db.ViewDatasetInfoByIdentifier("id", id)
-	} else if identifier != "" {
-		res, err = api.db.ViewDatasetInfoByIdentifier("identifier", identifier)
+	if qvainId != "" {
+		res, err = api.db.ViewDatasetInfoByIdentifier("id", qvainId)
+	} else if metaxId != "" {
+		res, err = api.db.ViewDatasetInfoByIdentifier("identifier", metaxId)
 	}
 	if err != nil {
 		dbError(w, err)
