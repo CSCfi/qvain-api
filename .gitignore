@@ -14,5 +14,5 @@
 *.test
 *.out
 
-# editors
+# editor configuration
 .vscode

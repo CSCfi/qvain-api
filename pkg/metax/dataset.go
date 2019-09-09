@@ -147,6 +147,11 @@ func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) err
 		return errors.New("dataset schema mismatch")
 	}
 
+	preservationState := gjson.GetBytes(dataset.Blob(), "preservation_state").Int()
+	if preservationState >= 80 {
+		return fmt.Errorf("cannot make changes to dataset with preservation_state >= 80")
+	}
+
 	// readOnly fields from the schema
 	readOnlyFields := []string{
 		"research_dataset.metadata_version_identifier",
@@ -160,6 +165,66 @@ func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) err
 		newVal := gjson.GetBytes(updated.Blob(), field).Raw
 		if oldVal != newVal {
 			return fmt.Errorf("readonly field %s changed %s -> %s", field, oldVal, newVal)
+		}
+	}
+
+	// catalog identifier can be either in data_catalog.identifier or directly as data_catalog
+	catalog := gjson.GetBytes(dataset.Blob(), "data_catalog.identifier").String()
+	if catalog == "" {
+		catalog = gjson.GetBytes(dataset.Blob(), "data_catalog").String()
+	}
+
+	// Checks that two (potentially nested) json values are equal. Normalizes the values
+	// by performing Unmarshal and Marshal for each value, and compares the resulting strings.
+	// The Marshal function sorts map keys so its output should be deterministic.
+	checkEqual := func(jsonA string, jsonB string) error {
+		// since an empty string does not contain a JSON value, check it separately
+		if jsonA == "" || jsonB == "" {
+			if jsonA != jsonB {
+				return errors.New("changes not allowed")
+			}
+			return nil
+		}
+
+		// If there are duplicate keys in objects, performing json.Unmarshal into an interface{} will
+		// only use the last value, which is also how the PostgreSQL jsonb type behaves.
+		var a, b interface{}
+		err := json.Unmarshal([]byte(jsonA), &a)
+		if err != nil {
+			return err
+		}
+
+		err = json.Unmarshal([]byte(jsonB), &b)
+		if err != nil {
+			return err
+		}
+
+		normalizedA, err := json.Marshal(a)
+		if err != nil {
+			return err
+		}
+
+		normalizedB, err := json.Marshal(b)
+		if err != nil {
+			return err
+		}
+		if string(normalizedA) != string(normalizedB) {
+			return errors.New("changes not allowed")
+		}
+		return nil
+	}
+
+	// changing files or directories for old dataset versions or PAS datasets is forbidden
+	isPas := preservationState > 0 || catalog == "urn:nbn:fi:att:data-catalog-pas"
+	isOld := gjson.GetBytes(dataset.Blob(), "next_dataset_version.identifier").String() != ""
+	if isPas || isOld {
+		err := checkEqual(gjson.GetBytes(dataset.Blob(), "research_dataset.files").Raw, gjson.GetBytes(updated.Blob(), "research_dataset.files").Raw)
+		if err != nil {
+			return fmt.Errorf("files: %s", err.Error())
+		}
+		err = checkEqual(gjson.GetBytes(dataset.Blob(), "research_dataset.directories").Raw, gjson.GetBytes(updated.Blob(), "research_dataset.directories").Raw)
+		if err != nil {
+			return fmt.Errorf("directories: %s", err.Error())
 		}
 	}
 
