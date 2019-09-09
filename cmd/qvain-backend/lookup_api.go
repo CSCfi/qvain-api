@@ -6,6 +6,7 @@ import (
 
 	"github.com/CSCfi/qvain-api/internal/psql"
 	"github.com/rs/zerolog"
+	"github.com/wvh/uuid"
 )
 
 // LookupApi holds the configuration for the lookup API.
@@ -76,6 +77,11 @@ func (api *LookupApi) Dataset(w http.ResponseWriter, r *http.Request) {
 		err error
 	)
 	if qvainId != "" {
+		if _, err = uuid.FromString(qvainId); err != nil { // avoid db error on invalid uuid
+			jsonError(w, "invalid dataset id", http.StatusBadRequest)
+			api.logger.Error().Str("qvain_id", qvainId).Msg("invalid dataset id")
+			return
+		}
 		res, err = api.db.ViewDatasetInfoByIdentifier("id", qvainId)
 	} else if metaxId != "" {
 		res, err = api.db.ViewDatasetInfoByIdentifier("identifier", metaxId)
