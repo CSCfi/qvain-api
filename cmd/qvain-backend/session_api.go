@@ -28,8 +28,7 @@ func NewSessionApi(sessions *sessions.Manager, logger zerolog.Logger, logoutRedi
 func (api *SessionApi) Current(w http.ResponseWriter, r *http.Request) {
 	session, err := api.sessions.SessionFromRequest(r)
 	if err != nil {
-		api.logger.Debug().Err(err).Msg("no current session")
-		sessionError(w, sessions.ErrSessionNotFound, &api.logger)
+		sessionError(w, sessions.ErrSessionNotFound, &api.logger).Err(err).Msg("no current session")
 		return
 	}
 

@@ -235,30 +235,29 @@ func (api *ApiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// allowed_projects should be set by the proxy, not in the original request
 	query := r.URL.Query()
 	if _, found := query["allowed_projects"]; found {
-		loggedJSONError(w, "bad request: allowed_projects is not allowed", http.StatusBadRequest, &api.logger).Msg("error in api_proxy")
+		loggedJSONError(w, "bad request: allowed_projects is not allowed", http.StatusBadRequest, &api.logger).Msg("api_proxy")
 		return
 	}
 
 	// proxy takes care of converting project to project_identifier as needed
 	if _, found := query["project_identifier"]; found {
-		loggedJSONError(w, "bad request: project_identifier is not allowed", http.StatusBadRequest, &api.logger).Msg("error in api_proxy")
+		loggedJSONError(w, "bad request: project_identifier is not allowed", http.StatusBadRequest, &api.logger).Msg("api_proxy")
 		return
 	}
 
 	// check optional project query parameter
 	if projectQueries, found := query["project"]; found {
 		if len(projectQueries) > 1 {
-			loggedJSONError(w, "bad request: multiple projects in query", http.StatusBadRequest, &api.logger).Msg("error in api_proxy")
+			loggedJSONError(w, "bad request: multiple projects in query", http.StatusBadRequest, &api.logger).Msg("api_proxy")
 			return
 		}
 		if len(session.User.Projects) < 1 {
-			loggedJSONError(w, "access denied: user has no projects", http.StatusForbidden, &api.logger).Msg("error in api_proxy")
+			loggedJSONError(w, "access denied: user has no projects", http.StatusForbidden, &api.logger).Msg("api_proxy")
 			return
 		}
 		project := projectQueries[0]
 		if !session.User.HasProject(project) {
-			api.logger.Debug().Strs("projects", session.User.Projects).Str("wanted", project).Msg("project check")
-			loggedJSONError(w, "access denied: invalid project", http.StatusForbidden, &api.logger).Msg("error in api_proxy")
+			loggedJSONError(w, "access denied: invalid project", http.StatusForbidden, &api.logger).Strs("projects", session.User.Projects).Str("wanted", project).Msg("project check")
 			return
 		}
 
@@ -281,7 +280,7 @@ func (api *ApiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := addPropertyToRequest(r, key, session.User.Identity); err != nil {
-			loggedJSONError(w, err.Error(), http.StatusInternalServerError, &api.logger).Msg("error in api_proxy")
+			loggedJSONError(w, err.Error(), http.StatusInternalServerError, &api.logger).Msg("api_proxy")
 			return
 		}
 	}
