@@ -147,7 +147,7 @@ func apiVersion(w http.ResponseWriter, r *http.Request) {
 
 // dbError handles database errors. It returns more specific API messages for predefined errors
 // that might be relevant for the user. Other errors return `database error` with a 500 status code.
-// Also loggs error message to backend terminal
+// Also logs error message to backend terminal
 func dbError(w http.ResponseWriter, err error, logger *zerolog.Logger) *zerolog.Event {
 	switch err {
 	case nil:
