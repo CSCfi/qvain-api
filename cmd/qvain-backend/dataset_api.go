@@ -100,7 +100,7 @@ func (api *DatasetApi) ListDatasets(w http.ResponseWriter, r *http.Request, user
 		api.logger.Debug().Str("op", "fetchall").Msg("datasets")
 		shared.FetchAll(api.metax, api.db, api.logger, user.Uid, user.Identity)
 	default:
-		loggedJSONError(w, "invalid parameter", http.StatusBadRequest, &api.logger).Str("URL.RawQuery", r.URL.RawQuery).Msg("Unhandled parameter")
+		loggedJSONError(w, "invalid parameter", http.StatusBadRequest, &api.logger).Msg("Unhandled parameter")
 		return
 	}
 
@@ -140,7 +140,7 @@ func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *mod
 			return
 
 		default:
-			loggedJSONError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed, &api.logger).Str("Resuest Method", r.Method).Msg("Unhandled request method")
+			loggedJSONError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed, &api.logger).Msg("Unhandled request method")
 			return
 		}
 	}
@@ -149,7 +149,7 @@ func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *mod
 	switch op {
 	case "export":
 		// TODO: assess security implementations before enabling this
-		loggedJSONError(w, "export not implemented", http.StatusNotImplemented, &api.logger).Msg("export failed")
+		loggedJSONError(w, "export not implemented", http.StatusNotImplemented, &api.logger).Msg("export not implemented")
 		return
 	case "versions":
 		if checkMethod(w, r, http.MethodGet) {
@@ -162,7 +162,7 @@ func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *mod
 		}
 		return
 	default:
-		loggedJSONError(w, "invalid dataset operation", http.StatusNotFound, &api.logger).Str("op", op).Msg("Unhandled dataset operation")
+		loggedJSONError(w, "invalid dataset operation", http.StatusNotFound, &api.logger).Msg("Unhandled dataset operation")
 		return
 	}
 }
@@ -191,12 +191,12 @@ func (api *DatasetApi) createDataset(w http.ResponseWriter, r *http.Request, cre
 	var err error
 
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		loggedJSONError(w, http.StatusText(http.StatusUnsupportedMediaType), http.StatusUnsupportedMediaType, &api.logger).Msg("Dataset creation failed")
+		loggedJSONError(w, http.StatusText(http.StatusUnsupportedMediaType), http.StatusUnsupportedMediaType, &api.logger).Msg("Unsupported content-type")
 		return
 	}
 
 	if r.Body == nil || r.Body == http.NoBody {
-		loggedJSONError(w, "empty body", http.StatusBadRequest, &api.logger).Msg("Dataset creation failed")
+		loggedJSONError(w, "empty body", http.StatusBadRequest, &api.logger).Msg("Dataset creation failed due to empty request body")
 		return
 	}
 
