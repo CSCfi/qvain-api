@@ -42,9 +42,12 @@ func (api *LookupApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			api.Dataset(w, r)
 			return
 		}
+		loggedJSONError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound, &api.logger).Msg("invalid lookup path")
+		return
 	}
 
-	loggedJSONError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound, &api.logger).Msg("Unhandled method")
+	loggedJSONError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound, &api.logger).Msg("Invalid method")
+	return
 }
 
 // Dataset retrieves information for a single dataset.
