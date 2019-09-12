@@ -68,7 +68,7 @@ func NewApis(config *Config) *Apis {
 		config.NewLogger("proxy"),
 		config.DevMode,
 	)
-	apis.lookup = NewLookupApi(config.db)
+	apis.lookup = NewLookupApi(config.db, config.NewLogger("lookup"), config.qvainLookupApiKey)
 	apis.stats = NewStatsApi(config.db, config.NewLogger("stats"), config.qvainStatsApiKey, !config.DevMode)
 
 	return apis
@@ -102,7 +102,11 @@ func (apis *Apis) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		versionC.Add(1)
 		ifGet(w, r, apiVersion)
 	case "vars":
-		expvar.Handler().ServeHTTP(w, r)
+		if apis.config.DevMode {
+			expvar.Handler().ServeHTTP(w, r)
+		} else {
+			jsonError(w, "unknown api called: "+TrimSlash(head), http.StatusNotFound)
+		}
 	case "":
 		ifGet(w, r, welcome)
 	default:
