@@ -47,7 +47,6 @@ func (api *LookupApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	loggedJSONError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound, &api.logger).Msg("Invalid method")
-	return
 }
 
 // Dataset retrieves information for a single dataset.
