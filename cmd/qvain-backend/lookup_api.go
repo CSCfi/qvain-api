@@ -87,8 +87,7 @@ func (api *LookupApi) Dataset(w http.ResponseWriter, r *http.Request) {
 		res, err = api.db.ViewDatasetInfoByIdentifier("identifier", metaxId)
 	}
 	if err != nil {
-		dbError(w, err)
-		api.logger.Error().Msg("error retrieving dataset info")
+		dbError(w, err, &api.logger).Msg("error retrieving dataset info")
 		return
 	}
 
