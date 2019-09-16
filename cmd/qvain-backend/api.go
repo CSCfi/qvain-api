@@ -110,6 +110,6 @@ func (apis *Apis) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "":
 		ifGet(w, r, welcome)
 	default:
-		jsonError(w, "unknown api called: "+TrimSlash(head), http.StatusNotFound)
+		loggedJSONError(w, "unknown api called: "+TrimSlash(head), http.StatusNotFound, &apis.logger).Str("head", head).Str("path", r.URL.Path).Msg("Error in api.serveHTTP()")
 	}
 }

@@ -33,8 +33,7 @@ func (api *LookupApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// api for services
 	key := r.URL.Query().Get("key")
 	if key != api.apiKey {
-		jsonError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		api.logger.Error().Msg("invalid api key")
+		loggedJSONError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized, &api.logger).Msg("invalid api key")
 		return
 	}
 
@@ -43,9 +42,11 @@ func (api *LookupApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			api.Dataset(w, r)
 			return
 		}
+		loggedJSONError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound, &api.logger).Msg("invalid lookup path")
+		return
 	}
 
-	jsonError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	loggedJSONError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound, &api.logger).Msg("Invalid method")
 }
 
 // Dataset retrieves information for a single dataset.
@@ -55,7 +56,7 @@ func (api *LookupApi) Dataset(w http.ResponseWriter, r *http.Request) {
 	api.logger.Debug().Bool("hasTrailing", hasTrailing).Str("path", r.URL.Path)
 
 	if head != "" || hasTrailing {
-		jsonError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		loggedJSONError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound, &api.logger).Msg("Unhandled request")
 		return
 	}
 
@@ -63,12 +64,12 @@ func (api *LookupApi) Dataset(w http.ResponseWriter, r *http.Request) {
 	metaxId := r.URL.Query().Get("metax_id") // metax identifier of the dataset
 
 	if qvainId == "" && metaxId == "" {
-		jsonError(w, "either 'qvain_id' or 'metax_id' required in query", http.StatusBadRequest)
+		loggedJSONError(w, "either 'qvain_id' or 'metax_id' required in query", http.StatusBadRequest, &api.logger).Msg("Lookup")
 		return
 	}
 
 	if qvainId != "" && metaxId != "" {
-		jsonError(w, "both 'qvain_id' and 'metax_id' in query", http.StatusBadRequest)
+		loggedJSONError(w, "both 'qvain_id' and 'metax_id' in query", http.StatusBadRequest, &api.logger).Msg("Lookup")
 		return
 	}
 
@@ -78,8 +79,7 @@ func (api *LookupApi) Dataset(w http.ResponseWriter, r *http.Request) {
 	)
 	if qvainId != "" {
 		if _, err = uuid.FromString(qvainId); err != nil { // avoid db error on invalid uuid
-			jsonError(w, "invalid dataset id", http.StatusBadRequest)
-			api.logger.Error().Str("qvain_id", qvainId).Msg("invalid dataset id")
+			loggedJSONError(w, "invalid dataset id", http.StatusBadRequest, &api.logger).Str("qvain_id", qvainId).Msg("invalid dataset id")
 			return
 		}
 		res, err = api.db.ViewDatasetInfoByIdentifier("id", qvainId)
@@ -87,8 +87,7 @@ func (api *LookupApi) Dataset(w http.ResponseWriter, r *http.Request) {
 		res, err = api.db.ViewDatasetInfoByIdentifier("identifier", metaxId)
 	}
 	if err != nil {
-		dbError(w, err)
-		api.logger.Error().Msg("error retrieving dataset info")
+		dbError(w, err, &api.logger).Msg("error retrieving dataset info")
 		return
 	}
 
