@@ -24,6 +24,50 @@ var (
 	ErrNoIdentifier = errors.New("no identifier in dataset")
 )
 
+// ChangeDatasetCumulativeState uses a Metax RPC call to change cumulative_state for a dataset with the given
+// Metax identifier. May create a new dataset version.
+func ChangeDatasetCumulativeState(api *metax.MetaxService, db *psql.DB, identifier string, cumulativeState string) (newQVersionId *uuid.UUID, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), PublishTimeout)
+	defer cancel()
+	if err = api.ChangeCumulativeState(ctx, identifier, cumulativeState); err != nil {
+		return nil, err
+	}
+
+	// newVersion, err = api.GetId(newVersionId)
+	// if err != nil {
+	// 	fmt.Println("error getting new version:", err)
+	// 	//return err
+	// 	return versionId, newVersionId, nil, err
+	// }
+	// fmt.Printf("new: %s\n\n", newVersion)
+
+	// // create a Qvain id for the new version
+	// var tmp uuid.UUID
+	// tmp, err = uuid.NewUUID()
+	// if err != nil {
+	// 	return
+	// }
+	// newQVersionId = &tmp
+
+	// synced := metax.GetModificationDate(newVersion)
+	// if synced.IsZero() {
+	// 	fmt.Fprintln(os.Stderr, "Could not find date_modified or date_created from new version!")
+	// 	synced = time.Now()
+	// }
+
+	// // store the new version
+	// err = db.WithTransaction(func(tx *psql.Tx) error {
+	// 	return tx.StoreNewVersion(id, *newQVersionId, synced, newVersion)
+	// })
+	// if err != nil {
+	// 	return
+	// }
+
+	// TODO: Determine new id if possible, fetch stuff?
+
+	return nil, err
+}
+
 // Publish stores a dataset in Metax and updates the Qvain database.
 // It returns the Metax identifier for the dataset, the new version idenifier if such was created, and an error.
 // The error returned can be a Metax ApiError, a Qvain database error, or a basic Go error.

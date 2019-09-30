@@ -26,7 +26,8 @@ import (
 const (
 	Verbose = false
 
-	DatasetsEndpoint = "/rest/datasets/"
+	DatasetsEndpoint              = "/rest/datasets/"
+	ChangeCumulativeStateEndpoint = "/rpc/datasets/change_cumulative_state"
 )
 
 var (
@@ -44,7 +45,8 @@ type MetaxService struct {
 	returnLatestVersion bool
 	logger              zerolog.Logger
 
-	urlDatasets string
+	urlDatasets              string
+	urlChangeCumulativeState string
 
 	user string
 	pass string
@@ -137,6 +139,7 @@ func NewMetaxService(host string, params ...MetaxOption) *MetaxService {
 
 func (api *MetaxService) makeEndpoints(base string) {
 	api.urlDatasets = base + DatasetsEndpoint
+	api.urlChangeCumulativeState = base + ChangeCumulativeStateEndpoint
 }
 
 type PaginatedResponse struct {
@@ -741,4 +744,49 @@ func (api *MetaxService) getDataset(id string, removed bool) (json.RawMessage, e
 	}
 
 	return body, nil
+}
+
+func (api *MetaxService) ChangeCumulativeState(ctx context.Context, identifier string, cumulativeState string) error {
+	req, err := http.NewRequest(http.MethodPost, api.urlChangeCumulativeState, nil)
+	if err != nil {
+		return err
+	}
+	q := req.URL.Query()
+	q.Add("identifier", identifier)
+	q.Add("cumulative_state", cumulativeState)
+	req.URL.RawQuery = q.Encode()
+
+	api.writeApiHeaders(req)
+
+	start := time.Now()
+	defer func() {
+		api.logger.Printf("metax: change_cumulative_state processed in %v", time.Since(start))
+	}()
+
+	res, err := api.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	body, _ := ioutil.ReadAll(res.Body)
+
+	fmt.Printf("RESPONSE BODY: %s\n", body)
+	fmt.Printf("RESPONSE: \n %s \n\n %+v \\n\n", res, res)
+
+	switch res.StatusCode {
+	case 204: // success
+	case 400:
+		return &ApiError{"invalid request", body, res.StatusCode}
+	case 401:
+		return &ApiError{"authorisation required", body, res.StatusCode}
+	case 403:
+		return &ApiError{"forbidden", body, res.StatusCode}
+	case 404:
+		return &ApiError{"not found", body, res.StatusCode}
+	default:
+		return &ApiError{"API returned error", body, res.StatusCode}
+	}
+
+	return nil
 }

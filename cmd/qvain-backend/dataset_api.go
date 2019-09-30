@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -9,6 +12,7 @@ import (
 	"github.com/CSCfi/qvain-api/internal/shared"
 	"github.com/CSCfi/qvain-api/pkg/metax"
 	"github.com/CSCfi/qvain-api/pkg/models"
+	"github.com/tidwall/gjson"
 
 	"github.com/francoispqt/gojay"
 	"github.com/rs/zerolog"
@@ -161,6 +165,12 @@ func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *mod
 			api.publishDataset(w, r, user, id)
 		}
 		return
+	case "change_cumulative_state":
+		if checkMethod(w, r, http.MethodPost) {
+			api.changeDatasetCumulativeState(w, r, user, id)
+		}
+		return
+
 	default:
 		loggedJSONError(w, "invalid dataset operation", http.StatusNotFound, &api.logger).Msg("Unhandled dataset operation")
 		return
@@ -202,15 +212,35 @@ func (api *DatasetApi) createDataset(w http.ResponseWriter, r *http.Request, cre
 
 	defer r.Body.Close()
 
-	typed, err := models.CreateDatasetFromJson(creator.Uid, r.Body, map[string]string{"identity": creator.Identity, "org": creator.Organisation})
+	extra := map[string]string{
+		"identity": creator.Identity,
+		"org":      creator.Organisation,
+	}
+
+	bodyBytes, _ := ioutil.ReadAll(r.Body)
+	r.Body.Close()
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	if cumulativeState := gjson.GetBytes(bodyBytes, "cumulative_state").String(); cumulativeState != "" {
+		extra["cumulative_state"] = cumulativeState
+	}
+
+	typed, err := models.CreateDatasetFromJson(creator.Uid, r.Body, extra)
 	if err != nil {
 		loggedJSONError(w, err.Error(), http.StatusBadRequest, &api.logger).Err(err).Msg("Dataset creation failed from JSON")
 		return
 	}
 
+	if typed.Unwrap().Family() == metax.MetaxDatasetFamily {
+		metaxDataset := &metax.MetaxDataset{Dataset: typed.Unwrap()}
+		err = metaxDataset.ValidateCreated()
+		if err != nil {
+			loggedJSONError(w, err.Error(), http.StatusBadRequest, &api.logger).Err(err).Msg("Dataset validation failed")
+			return
+		}
+	}
+
 	err = api.db.Create(typed.Unwrap())
 	if err != nil {
-		//jsonError(w, "store failed", http.StatusBadRequest)
 		dbError(w, err, &api.logger).Err(err).Msg("Creation of dataset failed")
 		return
 	}
@@ -233,7 +263,16 @@ func (api *DatasetApi) updateDataset(w http.ResponseWriter, r *http.Request, own
 
 	defer r.Body.Close()
 
-	typed, err := models.UpdateDatasetFromJson(owner.Uid, r.Body, nil)
+	extra := map[string]string{}
+
+	bodyBytes, _ := ioutil.ReadAll(r.Body)
+	r.Body.Close()
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	if cumulativeState := gjson.GetBytes(bodyBytes, "cumulative_state").String(); cumulativeState != "" {
+		extra["cumulative_state"] = cumulativeState
+	}
+
+	typed, err := models.UpdateDatasetFromJson(owner.Uid, r.Body, extra)
 	if err != nil {
 		loggedJSONError(w, err.Error(), http.StatusBadRequest, &api.logger).Err(err).Str("dataset", id.String()).Str("user", owner.Uid.String()).Msg("update dataset failed")
 		return
@@ -251,7 +290,7 @@ func (api *DatasetApi) updateDataset(w http.ResponseWriter, r *http.Request, own
 	}
 	if dataset.Family() == metax.MetaxDatasetFamily {
 		metaxDataset := &metax.MetaxDataset{Dataset: dataset}
-		err = metaxDataset.ValidateUpdatedDataset(typed.Unwrap())
+		err = metaxDataset.ValidateUpdated(typed.Unwrap())
 		if err != nil {
 			loggedJSONError(w, err.Error(), http.StatusBadRequest, &api.logger).Err(err).Msg("Updated dataset validation failed")
 			return
@@ -313,6 +352,107 @@ func (api *DatasetApi) deleteDataset(w http.ResponseWriter, r *http.Request, own
 	// deleted, return 204 No Content
 	apiWriteHeaders(w)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (api *DatasetApi) changeDatasetCumulativeState(w http.ResponseWriter, r *http.Request, owner *models.User, id uuid.UUID) {
+
+	// '/rpc/datasets/change_cumulative_state?identifier=%s&cumulative_state=%d'
+
+	dataset, err := api.db.GetWithOwner(id, owner.Uid)
+	if err != nil {
+		loggedJSONError(w, "error retrieving dataset", http.StatusNotFound, &api.logger).
+			Err(err).Str("uid", owner.Uid.String()).Str("dataset", id.String()).Msg("changing cumulative state failed")
+		return
+	}
+
+	if dataset.Unwrap().Family() != metax.MetaxDatasetFamily {
+		loggedJSONError(w, "not a metax dataset", http.StatusBadRequest, &api.logger).Err(err).Msg("changing cumulative state failed")
+		return
+	}
+
+	identifier := metax.GetIdentifier(dataset.Blob())
+	if identifier == "" {
+		loggedJSONError(w, "dataset identifier not found", http.StatusNotFound, &api.logger).
+			Err(err).Str("uid", owner.Uid.String()).Str("dataset", id.String()).Msg("changing cumulative state failed")
+		return
+	}
+
+	cumulativeState := r.URL.Query().Get("cumulative_state")
+	if cumulativeState == "" {
+		loggedJSONError(w, "missing value for cumulative_state", http.StatusBadRequest, &api.logger).
+			Str("uid", owner.Uid.String()).Str("dataset", id.String()).Msg("changing cumulative state failed")
+		return
+	}
+
+	api.logger.Debug().Str("cumulative_state", cumulativeState).Msg("changed cumulative state")
+
+	fmt.Println("identifier:       ", identifier)
+	fmt.Println("cumulative state: ", cumulativeState)
+
+	_, err = shared.ChangeDatasetCumulativeState(api.metax, api.db, identifier, cumulativeState)
+	if err != nil {
+		switch t := err.(type) {
+		case *metax.ApiError:
+			loggedJSONErrorWithPayload(w, t.Error(), convertExternalStatusCode(t.StatusCode()), &api.logger, "metax", t.OriginalError()).
+				Str("dataset", id.String()).Msg("changing cumulative state failed")
+		case *psql.DatabaseError:
+			dbError(w, err, &api.logger).
+				Err(err).Str("owner", owner.Uid.String()).Str("dataset", id.String()).Str("origin", "database").Msg("changing cumulative state failed")
+		default:
+			loggedJSONError(w, err.Error(), http.StatusNotFound, &api.logger).
+				Err(err).Str("owner", owner.Uid.String()).Str("dataset", id.String()).Msg("changing cumulative state failed")
+		}
+		return
+	}
+
+	// fetch
+	err = shared.Fetch(api.metax, api.db, api.logger, owner.Uid, owner.Identity)
+	if err != nil {
+		loggedJSONError(w, err.Error(), http.StatusBadRequest, &api.logger).Err(err).Msg("syncing updated dataset failed")
+		return
+	}
+	api.logger.Debug().Str("cumulative_state", cumulativeState).Msg("synced datasets")
+
+	// find updated dataset
+	dataset, err = api.db.GetWithOwner(id, owner.Uid)
+	if err != nil {
+		dbError(w, err, &api.logger).Err(err).Str("Dataset id", id.String()).Str("Owner Uid", owner.Uid.String()).Msg("Update dataset failed")
+		return
+	}
+	nextVersion := gjson.GetBytes(dataset.Blob(), "next_dataset_version.identifier").String()
+	nextVersionQvainId := ""
+	if nextVersion != "" {
+		// get existing Qvain datasets for user
+		userDatasets, err := api.db.GetAllForUid(owner.Uid)
+		if err != nil {
+			api.logger.Error().Err(err).Msg("failed to get user datasets")
+		}
+		for _, ds := range userDatasets {
+			if ds.Family() != metax.MetaxDatasetFamily {
+				continue
+			}
+			metaxIdentifier := metax.GetIdentifier(ds.Blob())
+			if metaxIdentifier == nextVersion {
+				nextVersionQvainId = ds.Id.String()
+			}
+		}
+	}
+
+	//
+	apiWriteHeaders(w)
+	enc := gojay.BorrowEncoder(w)
+	defer enc.Release()
+
+	enc.AppendByte('{')
+	enc.AddIntKey("status", http.StatusOK)
+	enc.AddStringKey("msg", "dataset cumulative state changed to "+cumulativeState)
+	enc.AddStringKey("id", id.String())
+	if nextVersionQvainId != "" {
+		enc.AddStringKey("new_id", nextVersionQvainId)
+	}
+	enc.AppendByte('}')
+	enc.Write()
+
 }
 
 // ListVersions lists an array of existing versions for a given dataset and owner.
