@@ -12,7 +12,8 @@ import (
 )
 
 // ChangeDatasetCumulativeState uses a Metax RPC call to change cumulative_state for a dataset with the given
-// Metax identifier. May create a new dataset version.
+// Metax identifier. The updated dataset is fetched from Metax and it replaces the current version in the DB,
+// so any unpublished changes are lost. If a new dataset version was created, returns the new Qvain identifier.
 func ChangeDatasetCumulativeState(api *metax.MetaxService, db *psql.DB, logger *zerolog.Logger, owner *models.User, id uuid.UUID, cumulativeState string) (newQVersionId *uuid.UUID, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), PublishTimeout)
 	defer cancel()
