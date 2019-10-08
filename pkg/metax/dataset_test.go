@@ -136,6 +136,7 @@ func TestValidateUpdatedDataset(t *testing.T) {
 	rawDataset := `{
 		"data_catalog":{"id":1,"identifier":"urn:nbn:fi:att:data-catalog-ida"},
 		"identifier":"urn:nbn:fi:att:bfe2d120-6ceb-4949-9755-882ab54c45b2",
+		"cumulative_state": 0,
 		"research_dataset":{
 			"title":{"en":"Wonderful Title"},
 			"total_files_byte_size":200,
@@ -164,7 +165,7 @@ func TestValidateUpdatedDataset(t *testing.T) {
 			t.Fatalf("expected no error, got: %v", err)
 		}
 		updated.SetData(updated.Family(), updated.Schema(), newBlob)
-		return metaxDataset.ValidateUpdatedDataset(updated)
+		return metaxDataset.ValidateUpdated(updated)
 	}
 
 	TestDeleteField := func(t *testing.T, field string) error {
@@ -176,7 +177,7 @@ func TestValidateUpdatedDataset(t *testing.T) {
 			t.Fatalf("expected no error, got: %v", err)
 		}
 		updated.SetData(updated.Family(), updated.Schema(), newBlob)
-		return metaxDataset.ValidateUpdatedDataset(updated)
+		return metaxDataset.ValidateUpdated(updated)
 	}
 
 	// change preferred identifier
@@ -211,6 +212,31 @@ func TestValidateUpdatedDataset(t *testing.T) {
 	err = TestField(t, "research_dataset.files", []byte(`[{"file_path":"/directory/file3"}]`))
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// change cumulative_state
+	err = TestField(t, "cumulative_state", []byte(`0`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	err = TestField(t, "cumulative_state", []byte(`1`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	err = TestField(t, "cumulative_state", []byte(`2`)) // 2 not valid initial state
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// set cumulative_state for published dataset
+	metaxDataset.Published = true
+	err = TestField(t, "cumulative_state", []byte(`0`)) // ok because state didn't change
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	err = TestField(t, "cumulative_state", []byte(`1`)) // error, state change not allowed
+	if err == nil {
+		t.Fatalf("expected an error")
 	}
 
 	// set metaxDataset catalog to PAS, which will prevent altering files/directories
@@ -257,7 +283,7 @@ func TestValidateUpdatedDataset(t *testing.T) {
 	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
 
 	// if preservation_state >= 80, all updates should be forbidden
-	err = TestField(t, "resarch_dataset.some_field", []byte(`"some_value"`))
+	err = TestField(t, "research_dataset.some_field", []byte(`"some_value"`))
 	if err == nil {
 		t.Fatalf("expected an error")
 	}

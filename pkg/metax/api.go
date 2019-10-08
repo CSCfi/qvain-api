@@ -21,6 +21,7 @@ import (
 
 	"github.com/CSCfi/qvain-api/pkg/models"
 	"github.com/rs/zerolog"
+	"github.com/tidwall/gjson"
 )
 
 const (
@@ -746,10 +747,12 @@ func (api *MetaxService) getDataset(id string, removed bool) (json.RawMessage, e
 	return body, nil
 }
 
-func (api *MetaxService) ChangeCumulativeState(ctx context.Context, identifier string, cumulativeState string) error {
+// ChangeCumulativeState calls Metax RPC for changing cumulative state of a dataset with given Metax identifier.
+// Returns the new Metax identifier if a new dataset version was created.
+func (api *MetaxService) ChangeCumulativeState(ctx context.Context, identifier string, cumulativeState string) (newMetaxId string, err error) {
 	req, err := http.NewRequest(http.MethodPost, api.urlChangeCumulativeState, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	q := req.URL.Query()
 	q.Add("identifier", identifier)
@@ -765,28 +768,26 @@ func (api *MetaxService) ChangeCumulativeState(ctx context.Context, identifier s
 
 	res, err := api.client.Do(req.WithContext(ctx))
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer res.Body.Close()
 
 	body, _ := ioutil.ReadAll(res.Body)
 
-	fmt.Printf("RESPONSE BODY: %s\n", body)
-	fmt.Printf("RESPONSE: \n %s \n\n %+v \\n\n", res, res)
-
 	switch res.StatusCode {
+	case 200: // success, new version created
+		return gjson.GetBytes(body, "new_version_created.identifier").String(), nil
 	case 204: // success
+		return "", nil
 	case 400:
-		return &ApiError{"invalid request", body, res.StatusCode}
+		return "", &ApiError{"invalid request", body, res.StatusCode}
 	case 401:
-		return &ApiError{"authorisation required", body, res.StatusCode}
+		return "", &ApiError{"authorisation required", body, res.StatusCode}
 	case 403:
-		return &ApiError{"forbidden", body, res.StatusCode}
+		return "", &ApiError{"forbidden", body, res.StatusCode}
 	case 404:
-		return &ApiError{"not found", body, res.StatusCode}
+		return "", &ApiError{"not found", body, res.StatusCode}
 	default:
-		return &ApiError{"API returned error", body, res.StatusCode}
+		return "", &ApiError{"API returned error", body, res.StatusCode}
 	}
-
-	return nil
 }

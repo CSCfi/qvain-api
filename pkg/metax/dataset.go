@@ -152,7 +152,6 @@ func (dataset *MetaxDataset) UpdateData(family int, schema string, blob []byte, 
 		Extid:           extid,
 	}
 
-	// add cumulativeState but don't validate it yet, ValidateUpdatedDataset will take care of validation
 	if cumulativeState, ok := extra["cumulative_state"]; ok && cumulativeState != "" {
 		bytes := []byte(cumulativeState)
 		patchedFields.CumulativeState = (*json.RawMessage)(&bytes)
@@ -183,7 +182,7 @@ var commonReadOnlyFields = []string{
 func (dataset *MetaxDataset) validate() error {
 	cumulativeState := gjson.GetBytes(dataset.Blob(), "cumulative_state").Raw
 	if cumulativeState != "" && !validateCumulativeState(cumulativeState, dataset.Published) {
-		return fmt.Errorf("invalid initial cumulative_state value %s", cumulativeState)
+		return fmt.Errorf("invalid cumulative_state value %s", cumulativeState)
 	}
 	return nil
 }

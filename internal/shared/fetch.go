@@ -2,7 +2,7 @@ package shared
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"time"
 
 	"github.com/CSCfi/qvain-api/internal/psql"
@@ -13,16 +13,19 @@ import (
 )
 
 const DefaultRequestTimeout = 15 * time.Second
-const RetryInterval = 10 * time.Second
+
+const (
+	SyncWritten = iota
+	SyncDeleted = iota
+	SyncSkipped = iota
+	SyncFailed  = iota
+)
 
 func Fetch(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid uuid.UUID, extid string) error {
 	last, err := db.GetLastSync(uid)
 	if err != nil && err != psql.ErrNotFound {
 		return err
-	} else if time.Now().Sub(last) < RetryInterval {
-		return fmt.Errorf("too soon")
 	}
-
 	return fetch(api, db, logger, uid, extid, last)
 }
 
@@ -32,6 +35,35 @@ func FetchSince(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid
 
 func FetchAll(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid uuid.UUID, extid string) error {
 	return fetch(api, db, logger, uid, extid, time.Time{})
+}
+
+// FetchDataset syncs a dataset from Metax and returns its Qvain identifier.
+func FetchDataset(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid uuid.UUID, metaxIdentifier string, forceSync bool) (*uuid.UUID, error) {
+	blob, err := api.GetId(metaxIdentifier)
+	if err != nil {
+		return nil, err
+	}
+
+	// setup DB batch transaction
+	batch, err := db.NewBatchForUser(uid)
+	if err != nil {
+		return nil, err
+	}
+	defer batch.Rollback()
+
+	// sync record
+	metaxDatasetQvainId, qvainDatasetSyncTime := getSyncInfo(db, logger, uid)
+	metaxRecord := metax.MetaxRawRecord{json.RawMessage(blob)}
+	qvainId, _, err := syncRecord(api, db, logger, batch, metaxDatasetQvainId, qvainDatasetSyncTime, uid, &metaxRecord, forceSync)
+	if err != nil {
+		return nil, err
+	}
+
+	err = batch.Commit()
+	if err != nil {
+		return nil, err
+	}
+	return qvainId, nil
 }
 
 func fetch(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid uuid.UUID, extid string, since time.Time) error {
@@ -70,6 +102,38 @@ func fetch(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid uuid
 	return nil
 }
 
+func getSyncInfo(db *psql.DB, logger zerolog.Logger, uid uuid.UUID) (map[string]*uuid.UUID, map[uuid.UUID]time.Time) {
+	metaxDatasetQvainId := make(map[string]*uuid.UUID)
+	qvainDatasetSyncTime := make(map[uuid.UUID]time.Time)
+	// get existing Qvain datasets for user
+	userDatasets, err := db.GetAllForUid(uid)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get user datasets")
+	}
+
+	// Map Metax identifier in Qvain dataset to the dataset id.
+	// Used when a dataset from Metax does not have a Qvain id in its editor metadata.
+	// Also get per-dataset timestamp of last sync.
+	for _, ds := range userDatasets {
+		if ds.Family() != metax.MetaxDatasetFamily {
+			continue
+		}
+
+		qvainDatasetSyncTime[ds.Id] = ds.Synced
+		metaxIdentifier := metax.GetIdentifier(ds.Blob())
+		if metaxIdentifier == "" {
+			continue
+		}
+		if _, exists := metaxDatasetQvainId[metaxIdentifier]; exists {
+			logger.Warn().Str("identifier", metaxIdentifier).Msg("multiple datasets have the same Metax indentifier")
+			continue
+		}
+		metaxDatasetQvainId[metaxIdentifier] = &ds.Id
+	}
+
+	return metaxDatasetQvainId, qvainDatasetSyncTime
+}
+
 func syncBatch(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid uuid.UUID, params []metax.DatasetOption) error {
 	// setup DB batch transaction
 	batch, err := db.NewBatchForUser(uid)
@@ -97,34 +161,10 @@ func syncBatch(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid 
 	failed := 0
 	success := false
 
-	// get existing Qvain datasets for user
-	userDatasets, err := db.GetAllForUid(uid)
-	if err != nil {
-		syncLogger.Error().Err(err).Msg("failed to get user datasets")
-	}
-
-	// Map Metax identifier in Qvain dataset to the dataset id.
-	// Used when a dataset from Metax does not have a Qvain id in its editor metadata.
-	// Also get per-dataset timestamp of last sync.
 	metaxDatasetQvainId := make(map[string]*uuid.UUID)
 	qvainDatasetSyncTime := make(map[uuid.UUID]time.Time)
 	if total > 0 {
-		for _, ds := range userDatasets {
-			if ds.Family() != metax.MetaxDatasetFamily {
-				continue
-			}
-
-			qvainDatasetSyncTime[ds.Id] = ds.Synced
-			metaxIdentifier := metax.GetIdentifier(ds.Blob())
-			if metaxIdentifier == "" {
-				continue
-			}
-			if _, exists := metaxDatasetQvainId[metaxIdentifier]; exists {
-				syncLogger.Warn().Str("identifier", metaxIdentifier).Msg("multiple datasets have the same Metax indentifier")
-				continue
-			}
-			metaxDatasetQvainId[metaxIdentifier] = &ds.Id
-		}
+		metaxDatasetQvainId, qvainDatasetSyncTime = getSyncInfo(db, syncLogger, uid)
 	}
 
 	// loop until all read, error or timeout
@@ -138,102 +178,25 @@ Done:
 			}
 
 			read++
-
-			// create dataset, use Qvain id from editor metadata if available
-			dataset, isNew, err := fdDataset.ToQvain()
-			if err != nil {
-				syncLogger.Debug().Err(err).Int("read", read).Msg("error parsing dataset")
-				failed++
-				continue
-			}
-
-			// was the Metax dataset not from Qvain?
-			if isNew {
-				// check if we already have a dataset with the same Metax identifier
-				identifier := metax.GetIdentifier(fdDataset.RawMessage)
-				if identifier != "" {
-					newId, found := metaxDatasetQvainId[identifier]
-					if found {
-						// update the existing dataset blob instead of creating a new dataset
-						isNew = false
-						dataset.Id = *newId
-					}
-				}
-			}
-
-			// delete qvain dataset
-			if dataset.Removed {
-				// if the map doesn't contain a previous sync, assume dataset does not exist in qvain
-				if qvainDatasetSyncTime[dataset.Id].IsZero() {
-					skipped++
-					continue
-				}
-
-				// delete qvain dataset
-				if err = batch.Delete(dataset.Id); err != nil {
-					syncLogger.Debug().Err(err).Int("read", read).Str("id", dataset.Id.String()).Msg("can't delete dataset")
-					failed++
-					continue
-				}
-				syncLogger.Debug().Str("id", dataset.Id.String()).Msg("deleted dataset")
-				deleted++
-				continue
-			}
-
-			// create new qvain dataset
-			if isNew {
-				// create new id
-				dataset.Id, err = uuid.NewUUID()
-				if err != nil {
-					return err
-				}
-
-				// inject current user for datasets created externally
-				dataset.Creator = uid
-				dataset.Owner = uid
-
-				// dataset comes from upstream, so consider it published and valid
-				dataset.Published = true
-				dataset.SetValid(true)
-
-				if err = batch.CreateWithMetadata(dataset); err != nil {
-					syncLogger.Debug().Err(err).Int("read", read).Str("id", dataset.Id.String()).Msg("can't store dataset")
-					failed++
-					continue
-				}
+			_, status, _ := syncRecord(api, db, syncLogger, batch, metaxDatasetQvainId, qvainDatasetSyncTime, uid, fdDataset, false)
+			switch status {
+			case SyncWritten:
 				written++
-				continue
-			}
-
-			// check if we have already synced the Qvain dataset based on modification dates
-			modified := metax.GetModificationDate(dataset.Blob())
-			if !modified.IsZero() && !modified.After(qvainDatasetSyncTime[dataset.Id]) {
-				syncLogger.Debug().Str("id", dataset.Id.String()).Msg("dataset not modified in Metax after last sync")
-				if err = batch.UpdateSynced(dataset.Id); err != nil {
-					syncLogger.Debug().Err(err).Int("read", read).Str("id", dataset.Id.String()).Msg("could't update sync timestamp")
-					failed++
-					continue
-				}
+			case SyncDeleted:
+				deleted++
+			case SyncSkipped:
 				skipped++
-				continue
-			}
-
-			// update qvain dataset
-			if err = batch.Update(dataset.Id, dataset.Blob()); err != nil {
-				syncLogger.Debug().Err(err).Int("read", read).Str("id", dataset.Id.String()).Msg("can't update dataset")
+			case SyncFailed:
 				failed++
-				continue
 			}
-			syncLogger.Debug().Bool("new", isNew).Str("id", dataset.Id.String()).Msg("updated dataset")
-			written++
 
 		case err := <-errc:
 			// error while streaming
-			syncLogger.Info().Err(err).Msg("api error")
+			logger.Info().Err(err).Msg("api error")
 			return err
 		case <-ctx.Done():
 			// timeout
-			syncLogger.Info().Err(ctx.Err()).Msg("api timeout")
+			logger.Info().Err(ctx.Err()).Msg("api timeout")
 			return err
 		}
 	}
@@ -241,11 +204,97 @@ Done:
 		err = batch.Commit()
 	}
 	if err != nil {
-		syncLogger.Info().Err(err).Msg("batch error")
+		logger.Info().Err(err).Msg("batch error")
 		return err
 	}
 
-	syncLogger.Info().Int("total", total).Int("written", written).
+	logger.Info().Int("total", total).Int("written", written).
 		Int("skipped", skipped).Int("deleted", deleted).Int("failed", failed).Msg("successful sync")
 	return nil
+}
+
+func syncRecord(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, batch *psql.BatchManager,
+	metaxDatasetQvainId map[string]*uuid.UUID, qvainDatasetSyncTime map[uuid.UUID]time.Time,
+	uid uuid.UUID, record *metax.MetaxRawRecord, forceSync bool) (*uuid.UUID, int, error) {
+	// create dataset, use Qvain id from editor metadata if available
+	dataset, isNew, err := record.ToQvain()
+	if err != nil {
+		logger.Debug().Err(err).Msg("error parsing dataset")
+		return nil, SyncFailed, err
+	}
+
+	// was the Metax dataset not from Qvain?
+	if isNew {
+		// check if we already have a dataset with the same Metax identifier
+		identifier := metax.GetIdentifier(record.RawMessage)
+		if identifier != "" {
+			newId, found := metaxDatasetQvainId[identifier]
+			if found {
+				// update the existing dataset blob instead of creating a new dataset
+				isNew = false
+				dataset.Id = *newId
+			}
+		}
+	}
+
+	// delete qvain dataset
+	if dataset.Removed {
+		// if the map doesn't contain a previous sync, assume dataset does not exist in qvain
+		if qvainDatasetSyncTime[dataset.Id].IsZero() {
+			logger.Debug().Err(err).Str("id", dataset.Id.String()).Msg("not in qvain, skipping deletion")
+			return nil, SyncSkipped, nil
+		}
+
+		// delete qvain dataset
+		if err = batch.Delete(dataset.Id); err != nil {
+			logger.Debug().Err(err).Str("id", dataset.Id.String()).Msg("can't delete dataset")
+			return nil, SyncFailed, err
+		}
+		logger.Debug().Str("id", dataset.Id.String()).Msg("deleted dataset")
+		return nil, SyncDeleted, nil
+	}
+
+	// create new qvain dataset
+	if isNew {
+		// create new id
+		dataset.Id, err = uuid.NewUUID()
+		if err != nil {
+			logger.Debug().Err(err).Str("id", dataset.Id.String()).Msg("error generating uuid")
+			return nil, SyncFailed, err
+		}
+
+		// inject current user for datasets created externally
+		dataset.Creator = uid
+		dataset.Owner = uid
+
+		// dataset comes from upstream, so consider it published and valid
+		dataset.Published = true
+		dataset.SetValid(true)
+
+		if err = batch.CreateWithMetadata(dataset); err != nil {
+			logger.Debug().Err(err).Str("id", dataset.Id.String()).Msg("can't store dataset")
+			return nil, SyncFailed, err
+		}
+		logger.Debug().Err(err).Str("id", dataset.Id.String()).Msg("created new dataset")
+		return &dataset.Id, SyncWritten, err
+	}
+
+	// check if we have already synced the Qvain dataset based on modification dates
+	modified := metax.GetModificationDate(dataset.Blob())
+	if !forceSync && !modified.IsZero() && !modified.After(qvainDatasetSyncTime[dataset.Id]) {
+		logger.Debug().Str("id", dataset.Id.String()).Msg("dataset not modified in Metax after last sync")
+		if err = batch.UpdateSynced(dataset.Id); err != nil {
+			logger.Debug().Err(err).Str("id", dataset.Id.String()).Msg("could't update sync timestamp")
+			return nil, SyncFailed, err
+		}
+		return &dataset.Id, SyncSkipped, nil
+	}
+
+	// update qvain dataset
+	if err = batch.Update(dataset.Id, dataset.Blob()); err != nil {
+		logger.Debug().Err(err).Str("id", dataset.Id.String()).Msg("can't update dataset")
+		return nil, SyncFailed, err
+	}
+	logger.Debug().Bool("new", isNew).Str("id", dataset.Id.String()).Msg("updated dataset")
+	return &dataset.Id, SyncWritten, nil
 }
