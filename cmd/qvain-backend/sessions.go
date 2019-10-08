@@ -89,7 +89,6 @@ func MakeSessionHandlerForFairdata(mgr *sessions.Manager, db *psql.DB, onLogin l
 			user.Projects = projects
 			logger.Debug().Strs("projects", projects).Msg("ida projects in token")
 		}
-		user.Projects = append(user.Projects, "research_project_112", "project_x", "string")
 
 		_, err = mgr.NewLoginWithCookie(
 			w,
