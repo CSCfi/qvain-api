@@ -38,7 +38,7 @@ func FetchAll(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid u
 }
 
 // FetchDataset syncs a dataset from Metax and returns its Qvain identifier.
-func FetchDataset(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid uuid.UUID, metaxIdentifier string, forceSync bool) (*uuid.UUID, error) {
+func FetchDataset(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, uid uuid.UUID, metaxIdentifier string) (*uuid.UUID, error) {
 	blob, err := api.GetId(metaxIdentifier)
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func FetchDataset(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, u
 	// sync record
 	metaxDatasetQvainId, qvainDatasetSyncTime := getSyncInfo(db, logger, uid)
 	metaxRecord := metax.MetaxRawRecord{json.RawMessage(blob)}
-	qvainId, _, err := syncRecord(api, db, logger, batch, metaxDatasetQvainId, qvainDatasetSyncTime, uid, &metaxRecord, forceSync)
+	qvainId, _, err := syncRecord(api, db, logger, batch, metaxDatasetQvainId, qvainDatasetSyncTime, uid, &metaxRecord)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ Done:
 			}
 
 			read++
-			_, status, _ := syncRecord(api, db, syncLogger, batch, metaxDatasetQvainId, qvainDatasetSyncTime, uid, fdDataset, false)
+			_, status, _ := syncRecord(api, db, syncLogger, batch, metaxDatasetQvainId, qvainDatasetSyncTime, uid, fdDataset)
 			switch status {
 			case SyncWritten:
 				written++
@@ -215,7 +215,7 @@ Done:
 
 func syncRecord(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, batch *psql.BatchManager,
 	metaxDatasetQvainId map[string]*uuid.UUID, qvainDatasetSyncTime map[uuid.UUID]time.Time,
-	uid uuid.UUID, record *metax.MetaxRawRecord, forceSync bool) (*uuid.UUID, int, error) {
+	uid uuid.UUID, record *metax.MetaxRawRecord) (*uuid.UUID, int, error) {
 	// create dataset, use Qvain id from editor metadata if available
 	dataset, isNew, err := record.ToQvain()
 	if err != nil {
@@ -281,7 +281,7 @@ func syncRecord(api *metax.MetaxService, db *psql.DB, logger zerolog.Logger, bat
 
 	// check if we have already synced the Qvain dataset based on modification dates
 	modified := metax.GetModificationDate(dataset.Blob())
-	if !forceSync && !modified.IsZero() && !modified.After(qvainDatasetSyncTime[dataset.Id]) {
+	if !modified.IsZero() && !modified.After(qvainDatasetSyncTime[dataset.Id]) {
 		logger.Debug().Str("id", dataset.Id.String()).Msg("dataset not modified in Metax after last sync")
 		if err = batch.UpdateSynced(dataset.Id); err != nil {
 			logger.Debug().Err(err).Str("id", dataset.Id.String()).Msg("could't update sync timestamp")

@@ -39,14 +39,14 @@ func ChangeDatasetCumulativeState(api *metax.MetaxService, db *psql.DB, logger *
 	logger.Debug().Str("identifier", identifier).
 		Str("cumulative_state", cumulativeState).Str("new_version_identifier", newMetaxIdentifier).Msg("changed cumulative_state")
 
-	qvainId, err := FetchDataset(api, db, *logger, owner.Uid, identifier, true)
+	qvainId, err := FetchDataset(api, db, *logger, owner.Uid, identifier)
 	if err != nil {
 		return nil, err
 	}
 	logger.Debug().Str("identifier", identifier).Str("id", qvainId.String()).Msg("fetched updated dataset")
 
 	if newMetaxIdentifier != "" {
-		newQVersionId, err = FetchDataset(api, db, *logger, owner.Uid, newMetaxIdentifier, true)
+		newQVersionId, err = FetchDataset(api, db, *logger, owner.Uid, newMetaxIdentifier)
 		if err != nil {
 			return nil, err
 		}
