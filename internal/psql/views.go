@@ -154,7 +154,7 @@ func (tx *Tx) viewDataset(id uuid.UUID, key string, svc string) (json.RawMessage
 	return record, nil
 }
 
-// ViewDatasetInfoByIdentifer gives basic information for a single dataset with a given identifier.
+// ViewDatasetInfoByIdentifier gives basic information for a single dataset with a given identifier.
 func (db *DB) ViewDatasetInfoByIdentifier(identifierType string, identifier string) (json.RawMessage, error) {
 	var record json.RawMessage
 
@@ -181,6 +181,7 @@ func (db *DB) ViewDatasetInfoByIdentifier(identifierType string, identifier stri
 				blob#>'{identifier}' identifier,
 				blob#>'{research_dataset,title}' title,
 				blob#>'{research_dataset,description}' description,
+				blob#>'{cumulative_state}' cumulative_state,
 				blob#>'{preservation_state}' preservation_state,
 				coalesce(blob#>'{data_catalog,identifier}', blob#>'{data_catalog}') data_catalog,
 				blob#>'{previous_dataset_version,identifier}' previous,

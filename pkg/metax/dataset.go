@@ -82,7 +82,7 @@ func (dataset *MetaxDataset) CreateData(family int, schema string, blob []byte, 
 	template["editor"] = (*json.RawMessage)(&editorJson)
 
 	if extra != nil {
-		// keep track of used keys so we can make sure all of them are actually used
+		// keep track of used keys so we can check for unused ones
 		usedKeys := make(map[string]bool)
 		getExtra := func(key string) (string, bool) {
 			usedKeys[key] = true

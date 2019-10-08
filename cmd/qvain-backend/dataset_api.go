@@ -169,7 +169,6 @@ func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *mod
 			api.changeDatasetCumulativeState(w, r, user, id)
 		}
 		return
-
 	default:
 		loggedJSONError(w, "invalid dataset operation", http.StatusNotFound, &api.logger).Msg("Unhandled dataset operation")
 		return
