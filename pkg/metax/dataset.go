@@ -162,9 +162,6 @@ func (dataset *MetaxDataset) UpdateData(family int, schema string, blob []byte, 
 		return err
 	}
 
-	//	v, _ := json.MarshalIndent(newBlob, "", "  ")
-	fmt.Printf("blob: %s", string(newBlob))
-
 	dataset.Dataset.SetData(family, schema, newBlob)
 
 	return nil
