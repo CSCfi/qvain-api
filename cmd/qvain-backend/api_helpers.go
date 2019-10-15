@@ -361,6 +361,8 @@ func (q *QueryParser) Validate() (invalidParams []string) {
 	return q.invalidParams
 }
 
+// loggedJSONError creates a new error UUID and writes an error API response. Use the chaining methods
+// of the returned zerolog event to add more error context and finally call its Msg method to log the error.
 func loggedJSONError(w http.ResponseWriter, msg string, status int, logger *zerolog.Logger) *zerolog.Event {
 	generatedErrorID := uuid.MustNewUUID().String()
 	apiWriteHeaders(w)
@@ -377,4 +379,25 @@ func loggedJSONError(w http.ResponseWriter, msg string, status int, logger *zero
 	enc.Write()
 
 	return logger.Error().Str("errorId ", generatedErrorID)
+}
+
+// loggedJSONErrorWithPayload writes an error API response like loggedJsonError, but allows adding a source and extra (pre-serialised) json value.
+func loggedJSONErrorWithPayload(w http.ResponseWriter, msg string, status int, logger *zerolog.Logger, origin string, payload []byte) *zerolog.Event {
+	generatedErrorID := uuid.MustNewUUID().String()
+	apiWriteHeaders(w)
+	w.WriteHeader(status)
+
+	enc := gojay.BorrowEncoder(w)
+	defer enc.Release()
+
+	enc.AppendByte('{')
+	enc.AddIntKey("status", status)
+	enc.AddStringKey("msg", msg)
+	enc.AddStringKey("error_id", generatedErrorID)
+	enc.AddStringKey("origin", origin)
+	enc.AddEmbeddedJSONKeyOmitEmpty("more", (*gojay.EmbeddedJSON)(&payload))
+	enc.AppendByte('}')
+	enc.Write()
+
+	return logger.Error().Str("errorId ", generatedErrorID).Str("origin", origin)
 }
