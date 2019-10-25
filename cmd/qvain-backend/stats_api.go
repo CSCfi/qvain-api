@@ -13,31 +13,29 @@ import (
 
 // StatsApi provides statistics for Qvain.
 type StatsApi struct {
-	db         *psql.DB
-	logger     zerolog.Logger
-	identity   string
-	apiKey     string
-	requireKey bool
+	db       *psql.DB
+	logger   zerolog.Logger
+	identity string
+	apiKey   string
 }
 
 // NewStatsApi creates a new StatsApi.
-func NewStatsApi(db *psql.DB, logger zerolog.Logger, apiKey string, requireKey bool) *StatsApi {
+func NewStatsApi(db *psql.DB, logger zerolog.Logger, apiKey string) *StatsApi {
 	return &StatsApi{
-		db:         db,
-		logger:     logger,
-		identity:   DefaultIdentity,
-		apiKey:     apiKey,
-		requireKey: requireKey,
+		db:       db,
+		logger:   logger,
+		identity: DefaultIdentity,
+		apiKey:   apiKey,
 	}
 }
 
 func (api *StatsApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if api.apiKey == "" && api.requireKey {
+	if api.apiKey == "" {
 		loggedJSONError(w, http.StatusText(http.StatusForbidden), http.StatusForbidden, &api.logger).Msg("missing api key")
 		return
 	}
 
-	key := r.URL.Query().Get("key")
+	key := r.Header.Get("api-key")
 	if key != api.apiKey {
 		loggedJSONError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized, &api.logger).Msg("invalid api key")
 		return
@@ -71,7 +69,6 @@ func getDatasetFilter(query url.Values) (*psql.DatasetFilter, []string) {
 		Organization:  parser.String("organization"),
 		GroupBy:       parser.StringOption("group_by", psql.DatasetFilterGroupByPaths),
 	}
-	parser.Skip("key")
 	return filter, parser.Validate()
 }
 

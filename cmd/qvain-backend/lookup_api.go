@@ -31,7 +31,7 @@ func (api *LookupApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.logger.Debug().Str("head", head).Str("path", r.URL.Path).Str("method", r.Method).Msg("lookup")
 
 	// api for services
-	key := r.URL.Query().Get("key")
+	key := r.Header.Get("api-key")
 	if key != api.apiKey {
 		loggedJSONError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized, &api.logger).Msg("invalid api key")
 		return
