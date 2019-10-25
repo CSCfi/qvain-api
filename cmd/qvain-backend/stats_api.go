@@ -35,7 +35,7 @@ func (api *StatsApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key := r.Header.Get("api-key")
+	key := r.Header.Get("x-api-key")
 	if key != api.apiKey {
 		loggedJSONError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized, &api.logger).Msg("invalid api key")
 		return
