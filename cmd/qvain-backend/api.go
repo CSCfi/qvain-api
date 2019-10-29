@@ -69,7 +69,7 @@ func NewApis(config *Config) *Apis {
 		config.DevMode,
 	)
 	apis.lookup = NewLookupApi(config.db, config.NewLogger("lookup"), config.qvainLookupApiKey)
-	apis.stats = NewStatsApi(config.db, config.NewLogger("stats"), config.qvainStatsApiKey, !config.DevMode)
+	apis.stats = NewStatsApi(config.db, config.NewLogger("stats"), config.qvainStatsApiKey)
 
 	return apis
 }
