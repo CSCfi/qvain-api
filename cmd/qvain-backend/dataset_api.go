@@ -169,6 +169,11 @@ func (api *DatasetApi) Dataset(w http.ResponseWriter, r *http.Request, user *mod
 			api.changeDatasetCumulativeState(w, r, user, id)
 		}
 		return
+	case "refresh_directory_content":
+		if checkMethod(w, r, http.MethodPost) {
+			api.refreshDatasetDirectoryContent(w, r, user, id)
+		}
+		return
 	default:
 		loggedJSONError(w, "invalid dataset operation", http.StatusNotFound, &api.logger).Msg("Unhandled dataset operation")
 		return
@@ -387,6 +392,45 @@ func (api *DatasetApi) changeDatasetCumulativeState(w http.ResponseWriter, r *ht
 	enc.AppendByte('{')
 	enc.AddIntKey("status", http.StatusOK)
 	enc.AddStringKey("msg", "dataset cumulative state changed to "+cumulativeState)
+	enc.AddStringKey("id", id.String())
+	if nextVersionQvainId != nil {
+		enc.AddStringKey("new_id", nextVersionQvainId.String())
+	}
+	enc.AppendByte('}')
+	enc.Write()
+}
+
+func (api *DatasetApi) refreshDatasetDirectoryContent(w http.ResponseWriter, r *http.Request, owner *models.User, id uuid.UUID) {
+	directoryIdentifier := r.URL.Query().Get("dir_identifier")
+	if directoryIdentifier == "" {
+		loggedJSONError(w, "missing value for dir_identifier", http.StatusBadRequest, &api.logger).
+			Str("uid", owner.Uid.String()).Str("dataset", id.String()).Msg("refreshing directory content failed")
+		return
+	}
+
+	nextVersionQvainId, err := shared.RefreshDatasetDirectoryContent(api.metax, api.db, &api.logger, owner, id, directoryIdentifier)
+	if err != nil {
+		switch t := err.(type) {
+		case *metax.ApiError:
+			loggedJSONErrorWithPayload(w, t.Error(), convertExternalStatusCode(t.StatusCode()), &api.logger, "metax", t.OriginalError()).
+				Str("dataset", id.String()).Msg("refreshing directory content failed")
+		case *psql.DatabaseError:
+			dbError(w, err, &api.logger).
+				Err(err).Str("owner", owner.Uid.String()).Str("dataset", id.String()).Str("origin", "database").Msg("refreshing directory content failed")
+		default:
+			loggedJSONError(w, err.Error(), http.StatusNotFound, &api.logger).
+				Err(err).Str("owner", owner.Uid.String()).Str("dataset", id.String()).Msg("refreshing directory content failed")
+		}
+		return
+	}
+
+	apiWriteHeaders(w)
+	enc := gojay.BorrowEncoder(w)
+	defer enc.Release()
+
+	enc.AppendByte('{')
+	enc.AddIntKey("status", http.StatusOK)
+	enc.AddStringKey("msg", "directory content refreshed")
 	enc.AddStringKey("id", id.String())
 	if nextVersionQvainId != nil {
 		enc.AddStringKey("new_id", nextVersionQvainId.String())
