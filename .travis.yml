@@ -1,0 +1,6 @@
+language: go
+# only test earliest go 1.8 and latest stable
+go:
+  - "1.8.x"
+  - "1.x"
+script: if $(echo $TRAVIS_GO_VERSION "1.10" | tr " " "\n" | sort -V -C -u); then go test -v ./...; else echo disabling go vet; go test -v -vet=off ./...; fi
