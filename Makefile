@@ -25,6 +25,15 @@ all: sourcelink summary es-cli message metax-cli qvain-backend qvain-cli redis-t
 	@echo "Build complete."
 	@echo
 
+source: clean
+	cd $(PROJECT_ROOT)/cmd/es-cli && go get -d
+	cd $(PROJECT_ROOT)/cmd/message && go get -d
+	cd $(PROJECT_ROOT)/cmd/metax-cli && go get -d
+	cd $(PROJECT_ROOT)/cmd/qvain-backend && go get -d
+	cd $(PROJECT_ROOT)/cmd/qvain-cli && go get -d
+	cd $(PROJECT_ROOT)/cmd/sourcelink && go get -d
+	tar xvf qvain-api-$(HASH).tar.bz2 .
+
 summary:
 	@echo =========================================================
 	@echo TAG: $(TAG)
@@ -70,9 +79,11 @@ sourcelink:
 	@cd $(PROJECT_ROOT)/cmd/sourcelink && $(GO_MAKE_BUILD)
 	@echo "..built."
 
+rebuild: clean all
+
 clean:
-	chmod -Rf 700 pkg
-	rm -Rf bin pkg
+	@test -d pkg/ && chmod -Rf 700 pkg || true
+	@rm -Rf bin pkg src/github.com/securego src/github.com/BurntSushi src/golang.org src/honnef.co src/github.com/nbutton23 src/gopkg.in
 
 check: lint staticcheck gosec
 	@echo
