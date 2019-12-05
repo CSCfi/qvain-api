@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	sourcelink "github.com/wvh/sourcelink/lib"
+	sourcelink "github.com/CSCfi/qvain-api/cmd/sourcelink/lib"
 )
 
 func main() {

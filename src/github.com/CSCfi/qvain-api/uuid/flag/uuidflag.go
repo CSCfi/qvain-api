@@ -1,7 +1,7 @@
 // Package uuidflag wraps a UUID so it satisfies the Value and Getter interface of the Go flag package.
 package uuidflag
 
-import "github.com/wvh/uuid"
+import "github.com/CSCfi/qvain-api/uuid"
 
 // Uuid wraps UUID.
 type Uuid struct {
