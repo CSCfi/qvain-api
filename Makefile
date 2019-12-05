@@ -1,119 +1,83 @@
-#
-# -wvh- Makefile to build Go binaries for commands in cmd/*
-#
-#       The only thing this Makefile does as opposed to an ordinary `go build ./...` is to link in version info.
-#
+SHELL:=/bin/bash
 
-GO := go
-CMDS := $(notdir $(wildcard cmd/*))
-ROOTDIR := $(CURDIR)
-PARENTDIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../)
-BINDIR := $(ROOTDIR)/bin
-DATADIRS := $(addprefix $(ROOTDIR)/,doc bench bin)
-RELEASEDIR=$(ROOTDIR)/release
-SOURCELINK := ${GOBIN}/sourcelink
-
-export PATH := $(BINDIR):$(PATH):/usr/local/go/bin/
+PROJECT_ROOT:=src/github.com/CSCfi/qvain-api
+GOPATH:=$(shell pwd)
+PATH:=$(GOPATH)/bin:$(PATH)
 
 ### VCS
 TAG := $(shell git describe --tags --always --dirty="-dev" 2>/dev/null)
 HASH := $(shell git rev-parse --short HEAD 2>/dev/null)
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null)
 REPO := $(shell git ls-remote --get-url 2>/dev/null)
-REPOLINK := $(shell test -x $(SOURCELINK) && ${GOBIN}/sourcelink $(REPO) $(HASH) $(BRANCH) 2>/dev/null || echo)
-VERSION_PACKAGE := $(shell $(GO) list -f '{{.ImportPath}}' ./internal/version)
+REPOLINK := $(shell test -x $(SOURCELINK) && bin/sourcelink $(REPO) $(HASH) $(BRANCH) 2>/dev/null || echo)
+VERSION_PACKAGE := $(shell go list -f '{{.ImportPath}}' ./src/github.com/CSCfi/qvain-api/internal/version)
 
 ### collect VCS info for linker
 LDFLAGS := "-s -w -X $(VERSION_PACKAGE).CommitHash=$(HASH) -X $(VERSION_PACKAGE).CommitTag=$(TAG) -X $(VERSION_PACKAGE).CommitBranch=$(BRANCH) -X $(VERSION_PACKAGE).CommitRepo=$(REPOLINK)"
 
-### trim paths from binaries
-# ... for go < 1.10
-#TRIMFLAGS := -gcflags=-trimpath=$(PARENTDIR) -asmflags=-trimpath=$(PARENTDIR)
-# ... for go >= 1.10
-TRIMFLAGS := -gcflags=all=-trimpath=$(PARENTDIR) -asmflags=all=-trimpath=$(PARENTDIR)
+GO_MAKE_BUILD:=go get -d && go build -v -ldflags $(LDFLAGS) && go install
 
-#IMPORT_PATH := $(shell go list -f '{{.ImportPath}}' .)
-#BINARY := $(notdir $(IMPORT_PATH))
+export PATH
+export GOPATH
 
-.PHONY: all install run runall release clean cloc doc prebuild listall
+all: sourcelink summary es-cli message metax-cli qvain-backend qvain-cli redis-test
+	@echo
+	@echo "Build complete."
+	@echo
 
-all: listall $(CMDS) # badger
-	@#@echo built all: $(CMDS)
-	@echo build successful!
+summary:
+	@echo =========================================================
+	@echo TAG: $(TAG)
+	@echo HASH: $(HASH)
+	@echo BRANCH: $(BRANCH)
+	@echo REPO: $(REPO)
+	@echo REPOLINK: $(REPOLINK)
+	@echo VERSION_PACKAGE: $(VERSION_PACKAGE)
+	@echo =========================================================
 
-$(CMDS): prebuild $(wildcard cmd/$@/*.go)
-	@echo building: $@
-	@cd cmd/$@; \
-	$(GO) build -o $(BINDIR)/$@ -ldflags $(LDFLAGS)
+es-cli:
+	@echo "Building es-cli.."
+	@cd $(PROJECT_ROOT)/cmd/es-cli && $(GO_MAKE_BUILD)
+	@echo "..built."
 
-# badger:
-#	@echo building: $@
-# 	@env GOBIN=$(BINDIR) $(GO) install -v github.com/dgraph-io/badger/...
+message:
+	@echo "Building message.."
+	@cd $(PROJECT_ROOT)/cmd/message && $(GO_MAKE_BUILD)
+	@echo "..built."
 
-# this doesn't actually use make but relies on the build cache in Go 1.10 to build only those files that have changed
-# TODO: what about data directories?
-install: listall
-	@env GOBIN=$(BINDIR) $(GO) install -v -ldflags $(LDFLAGS) $(TRIMFLAGS) ./cmd/...
-	@if test -n "$(INSTALL)"; then \
-		echo "installing to $(INSTALL):"; \
-		cp -auvf $(BINDIR)/* $(INSTALL)/; \
-	fi
+metax-cli:
+	@echo "Building metax-cli.."
+	@cd $(PROJECT_ROOT)/cmd/metax-cli && $(GO_MAKE_BUILD)
+	@echo "..built."
 
-# hack to run command from make command line goal arguments
-# NOTE: any clean-up lines after the command is run won't execute if the program is interrupted with SIGINT
-.SECONDEXPANSION:
-runall: $$(filter-out $$@,$(MAKECMDGOALS))
-	@- bash -c "trap 'true' SIGINT; $(BINDIR)/$<" || rm -f $(BINDIR)/$<
-	rm -f $(addprefix $(BINDIR)/, $^)
+qvain-backend:
+	@echo "Building qvain-backend.."
+	@cd $(PROJECT_ROOT)/cmd/qvain-backend && $(GO_MAKE_BUILD)
+	@echo "..built."
 
-# hack to run command from make command line goal arguments
-# Supports simple arguments but won't work for complex arguments because Make splits on spaces.
-# Remember to escape flags so Make doesn't interpret them:
-#   $ make -- run some-command -d
-# NOTE: any clean-up lines after the command is run won't execute if the program is interrupted with SIGINT
-.SECONDEXPANSION:
-run: $$(wordlist 2,2,$(MAKECMDGOALS))
-	@- bash -c "trap 'true' SIGINT; $(BINDIR)/$< $(wordlist 3,100,$(MAKECMDGOALS))" || rm -f $(BINDIR)/$<
-	rm -f $(addprefix $(BINDIR)/, $^)
+qvain-cli:
+	@echo "Building qvain-cli.."
+	@cd $(PROJECT_ROOT)/cmd/qvain-cli && $(GO_MAKE_BUILD)
+	@echo "..built."
+
+redis-test:
+	@echo "Building redis-test.."
+	@cd $(PROJECT_ROOT)/cmd/redis-test && $(GO_MAKE_BUILD)
+	@echo "..built."
+
+sourcelink:
+	@echo "Building sourcelink.."
+	@cd $(PROJECT_ROOT)/cmd/sourcelink && $(GO_MAKE_BUILD)
+	@echo "..built."
 
 clean:
-	#rm -f $(foreach cmd,$(CMDS),cmd/$(cmd)/$(cmd))
-	go clean ./...
-	rm -f $(BINDIR)/*
-
-# generate dependency list
-doc: doc/go_dependencies.md
-	scripts/make_go_dependencies_list.sh
-
-$(SOURCELINK):
-	-go get -v github.com/wvh/sourcelink
-
-prebuild: $(SOURCELINK)
-#	@$(eval REPOLINK=$(shell test -x ${GOBIN}/sourcelink && ${GOBIN}/sourcelink $(REPO) $(HASH) $(BRANCH) 2>/dev/null || echo ""))
-	@echo ran prebuild requirements
-
-release: listall minify doc
-	@$(eval BUILDDIR=$(RELEASEDIR)/$(TAG))
-	echo building release $(TAG) in $(BUILDDIR)
-	mkdir -p $(BUILDDIR)/{bin,doc,schema}
-	@env GOBIN=$(BUILDDIR)/bin $(GO) install -v -ldflags $(LDFLAGS) ./cmd/...
-	cp -auvf doc/* $(BUILDDIR)/doc
-	cp -auvf schema/* $(BUILDDIR)/schema
-	ln -sfn $(BUILDDIR) $(RELEASEDIR)/stable
-	ln -sfn $(BUILDDIR) $(RELEASEDIR)/testing
-	ln -sfn $(BUILDDIR) $(RELEASEDIR)/test
-
-cloc:
-	cloc --exclude-dir=vendor .
-
-listall:
-	@echo version: $(TAG)
-	@echo building all: $(CMDS)
+	chmod -Rf 700 pkg
+	rm -Rf bin pkg
 
 check: lint staticcheck gosec
 	@echo
 	@echo "== Running tests =="
-	-@go test ./...
+	-@cd $(PROJECT_ROOT) && go test ./...
 	@echo "== Completed tests =="
 	@echo
 
@@ -122,31 +86,31 @@ security: gosec
 lint:
 	@echo
 	@echo "== Ensure golint is installed =="
-	@go get -u golang.org/x/lint/golint 2> /dev/null
+	@test -f bin/golint || go get -u golang.org/x/lint/golint 2> /dev/null
 	@echo "== Completed golint installation =="
 	@echo
 	@echo "== Running golint =="
-	@golint ./...
+	@./bin/golint src/github.com/CSCfi/qvain-api/...
 	@echo "== Completed golint =="
 	@echo
 
 staticcheck:
 	@echo
 	@echo "== Installing staticcheck =="
-	@go get -u honnef.co/go/tools/cmd/staticcheck 2> /dev/null
+	@test -f bin/staticcheck || go get -u honnef.co/go/tools/cmd/staticcheck 2> /dev/null
 	@echo "== Completed staticcheck installation =="
 	@echo
 	@echo "== Running staticcheck =="
-	-@staticcheck -f stylish ./...
+	-@./bin/staticcheck -f stylish src/github.com/CSCfi/qvain-api/...
 	@echo "== Completed staticcheck =="
 	@echo
 
 gosec:
 	@echo
 	@echo "== Installing gosec =="
-	@go get github.com/securego/gosec/cmd/gosec
+	@test -f bin/gosec || go get github.com/securego/gosec/cmd/gosec
 	@echo "== Completed gosec installation =="
 	@echo
 	@echo "== Running gosec =="
-	-@gosec ./...
+	-@./bin/gosec src/github.com/CSCfi/qvain-api/...
 	@echo "== Completed gosec =="

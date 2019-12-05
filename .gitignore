@@ -17,3 +17,7 @@
 # editor configuration
 .vscode
 .editorconfig
+
+.DS_Store
+
+/pkg/

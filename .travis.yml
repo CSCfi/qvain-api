@@ -2,10 +2,8 @@ language: go
 go:
 - 1.11.x
 - 1.x
-install:
-- env GO111MODULE=on go get -t ./cmd/...
 script:
-- env GO111MODULE=on go build -v ./cmd/...
+- env GO111MODULE=on make
 - env GO111MODULE=on make check
 notifications:
   flowdock:
