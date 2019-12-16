@@ -21,6 +21,7 @@ type Config struct {
 	// application settings
 	Hostname      string
 	Port          string
+	DevPort       string
 	Standalone    bool
 	ForceHttpOnly bool
 	Debug         bool
@@ -85,6 +86,7 @@ func ConfigFromEnv() (*Config, error) {
 	return &Config{
 		Hostname:          hostname,
 		Port:              *appHttpPort,
+		DevPort:           env.GetDefault("APP_DEV_PORT",""),
 		Standalone:        env.GetBool("APP_HTTP_STANDALONE"),
 		ForceHttpOnly:     *forceHttpOnly,
 		Debug:             *appDebug,
