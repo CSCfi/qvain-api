@@ -57,7 +57,7 @@ func NewApis(config *Config) *Apis {
 	apis.sessions = NewSessionApi(
 		config.sessions,
 		config.NewLogger("sessions"),
-		config.oidcProviderUrl+"/idp/profile/Logout",
+		config.oidcProviderUrl+config.oidcLogoutPath,
 	)
 	apis.auth = NewAuthApi(config, makeOnFairdataLogin(metax, config.db, config.NewLogger("sync")), config.NewLogger("auth"))
 	apis.proxy = NewApiProxy(
