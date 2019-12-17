@@ -42,6 +42,7 @@ type Config struct {
 	oidcProviderUrl  string
 	oidcClientID     string
 	oidcClientSecret string
+	oidcLogoutPath   string
 
 	// stats api settings
 	qvainStatsApiKey  string
@@ -100,6 +101,7 @@ func ConfigFromEnv() (*Config, error) {
 		oidcProviderUrl:   env.Get("APP_OIDC_PROVIDER_URL"),
 		oidcClientID:      env.Get("APP_OIDC_CLIENT_ID"),
 		oidcClientSecret:  env.Get("APP_OIDC_CLIENT_SECRET"),
+		oidcLogoutPath:    env.GetDefault("APP_OIDC_LOGOUT_PATH","/idp/profile/Logout"),
 		MetaxApiHost:      env.Get("APP_METAX_API_HOST"),
 		metaxApiUser:      env.Get("APP_METAX_API_USER"),
 		metaxApiPass:      env.Get("APP_METAX_API_PASS"),
