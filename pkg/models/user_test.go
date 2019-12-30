@@ -1,6 +1,9 @@
 package models
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"net/url"
 	"reflect"
 	"testing"
 
@@ -120,4 +123,44 @@ func TestMissingJsonUser(t *testing.T) {
 	}
 
 	t.Logf("%+v\n", user.Uid)
+}
+
+func TestAddAccessGranter(t *testing.T) {
+	str := baseUser.AddAccessGranter("test=1234&test2=1337")
+
+	values, err := url.ParseQuery(str)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Existing query parameters should not change
+	if values.Get("test") != "1234" {
+		t.Errorf("value of query parameter test changed")
+	}
+	if values.Get("test2") != "1337" {
+		t.Errorf("value of query parameter test2 changed")
+	}
+
+	// The access_granter parameter should be base64 encoded json
+	encoded := values.Get("access_granter")
+	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessGranter := new(AccessGranter)
+	err = json.Unmarshal([]byte(decoded), accessGranter)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The values contained in access_granter should match the User
+	if accessGranter.UserID != baseUser.Identity {
+		t.Errorf("accessGranter.UserID != baseUser.Identity")
+	}
+	if accessGranter.Email != baseUser.Email {
+		t.Errorf("accessGranter.Email != baseUser.Email")
+	}
+	if accessGranter.Name != baseUser.Name {
+		t.Errorf("accessGranter.Name != baseUser.Name")
+	}
 }

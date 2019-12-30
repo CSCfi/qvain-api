@@ -572,6 +572,7 @@ func (api *MetaxService) Store(ctx context.Context, blob json.RawMessage, owner 
 		return nil, err
 	}
 	req.URL.RawQuery = owner.AddAllowedProjects(req.URL.RawQuery)
+	req.URL.RawQuery = owner.AddAccessGranter(req.URL.RawQuery)
 
 	api.writeApiHeaders(req)
 
