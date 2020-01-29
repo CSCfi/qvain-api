@@ -13,35 +13,31 @@ import (
 
 // StatsApi provides statistics for Qvain.
 type StatsApi struct {
-	db         *psql.DB
-	logger     zerolog.Logger
-	identity   string
-	apiKey     string
-	requireKey bool
+	db       *psql.DB
+	logger   zerolog.Logger
+	identity string
+	apiKey   string
 }
 
 // NewStatsApi creates a new StatsApi.
-func NewStatsApi(db *psql.DB, logger zerolog.Logger, apiKey string, requireKey bool) *StatsApi {
+func NewStatsApi(db *psql.DB, logger zerolog.Logger, apiKey string) *StatsApi {
 	return &StatsApi{
-		db:         db,
-		logger:     logger,
-		identity:   DefaultIdentity,
-		apiKey:     apiKey,
-		requireKey: requireKey,
+		db:       db,
+		logger:   logger,
+		identity: DefaultIdentity,
+		apiKey:   apiKey,
 	}
 }
 
 func (api *StatsApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if api.apiKey == "" && api.requireKey {
-		api.logger.Error().Msg("missing api key")
-		jsonError(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+	if api.apiKey == "" {
+		loggedJSONError(w, http.StatusText(http.StatusForbidden), http.StatusForbidden, &api.logger).Msg("missing api key")
 		return
 	}
 
-	key := r.URL.Query().Get("key")
+	key := r.Header.Get("x-api-key")
 	if key != api.apiKey {
-		api.logger.Error().Msg("invalid api key")
-		jsonError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		loggedJSONError(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized, &api.logger).Msg("invalid api key")
 		return
 	}
 
@@ -49,7 +45,7 @@ func (api *StatsApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.logger.Debug().Str("head", head).Str("path", r.URL.Path).Str("method", r.Method).Msg("stats")
 
 	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		loggedJSONError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed, &api.logger).Str("head", head).Str("path", r.URL.Path).Str("method", r.Method).Msg("stats")
 		return
 	}
 
@@ -58,7 +54,7 @@ func (api *StatsApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	loggedJSONError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound, &api.logger).Msg("stats")
 }
 
 func getDatasetFilter(query url.Values) (*psql.DatasetFilter, []string) {
@@ -73,7 +69,6 @@ func getDatasetFilter(query url.Values) (*psql.DatasetFilter, []string) {
 		Organization:  parser.String("organization"),
 		GroupBy:       parser.StringOption("group_by", psql.DatasetFilterGroupByPaths),
 	}
-	parser.Skip("key")
 	return filter, parser.Validate()
 }
 

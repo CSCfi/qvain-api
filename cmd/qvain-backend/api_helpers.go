@@ -11,6 +11,7 @@ import (
 	"github.com/CSCfi/qvain-api/internal/version"
 
 	"github.com/francoispqt/gojay"
+	"github.com/rs/zerolog"
 	"github.com/wvh/uuid"
 )
 
@@ -146,50 +147,49 @@ func apiVersion(w http.ResponseWriter, r *http.Request) {
 
 // dbError handles database errors. It returns more specific API messages for predefined errors
 // that might be relevant for the user. Other errors return `database error` with a 500 status code.
-func dbError(w http.ResponseWriter, err error) bool {
+// Also logs error message to backend terminal
+func dbError(w http.ResponseWriter, err error, logger *zerolog.Logger) *zerolog.Event {
 	switch err {
 	case nil:
-		return false
+		return nil
 	// meta
 	case psql.ErrExists:
-		jsonError(w, "resource exists already", http.StatusConflict)
+		return loggedJSONError(w, "resource exists already", http.StatusConflict, logger)
 	case psql.ErrNotFound:
-		jsonError(w, "resource not found", http.StatusNotFound)
+		return loggedJSONError(w, "resource not found", http.StatusNotFound, logger)
 	case psql.ErrNotOwner:
-		jsonError(w, "not resource owner", http.StatusForbidden)
+		return loggedJSONError(w, "not resource owner", http.StatusForbidden, logger)
 	case psql.ErrInvalidJson:
-		jsonError(w, "invalid input", http.StatusBadRequest)
+		return loggedJSONError(w, "invalid input", http.StatusBadRequest, logger)
 	// connection
 	case psql.ErrConnection:
-		jsonError(w, "no database connection", http.StatusServiceUnavailable)
+		return loggedJSONError(w, "no database connection", http.StatusServiceUnavailable, logger)
 	case psql.ErrTimeout:
-		jsonError(w, "database timeout", http.StatusServiceUnavailable)
+		return loggedJSONError(w, "database timeout", http.StatusServiceUnavailable, logger)
 	case psql.ErrTemporary:
-		jsonError(w, "temporary database error", http.StatusServiceUnavailable)
+		return loggedJSONError(w, "temporary database error", http.StatusServiceUnavailable, logger)
 	// generic
 	default:
-		jsonError(w, "database error", http.StatusInternalServerError)
+		return loggedJSONError(w, "database error", http.StatusInternalServerError, logger)
 	}
-	return true
 }
 
-// sessionError handles session errors by returning appropriate HTTP status codes.
-func sessionError(w http.ResponseWriter, err error) bool {
+// sessionError handles session errors by returning appropriate HTTP status codes and logging into backend terminal.
+func sessionError(w http.ResponseWriter, err error, logger *zerolog.Logger) *zerolog.Event {
 	switch err {
 	case nil:
-		return false
+		return nil
 	// session errors
 	case sessions.ErrSessionNotFound:
-		jsonError(w, err.Error(), http.StatusUnauthorized)
+		return loggedJSONError(w, err.Error(), http.StatusUnauthorized, logger)
 	case sessions.ErrCreatingSid:
-		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return loggedJSONError(w, err.Error(), http.StatusInternalServerError, logger)
 	case sessions.ErrUnknownUser:
-		jsonError(w, err.Error(), http.StatusServiceUnavailable)
+		return loggedJSONError(w, err.Error(), http.StatusServiceUnavailable, logger)
 	// catch-all
 	default:
-		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return loggedJSONError(w, err.Error(), http.StatusInternalServerError, logger)
 	}
-	return true
 }
 
 // convertExternalStatusCode tries to convert a status code from an eternal service to one this application can provide.
@@ -359,4 +359,45 @@ func (q *QueryParser) Validate() (invalidParams []string) {
 		}
 	}
 	return q.invalidParams
+}
+
+// loggedJSONError creates a new error UUID and writes an error API response. Use the chaining methods
+// of the returned zerolog event to add more error context and finally call its Msg method to log the error.
+func loggedJSONError(w http.ResponseWriter, msg string, status int, logger *zerolog.Logger) *zerolog.Event {
+	generatedErrorID := uuid.MustNewUUID().String()
+	apiWriteHeaders(w)
+	w.WriteHeader(status)
+
+	enc := gojay.BorrowEncoder(w)
+	defer enc.Release()
+
+	enc.AppendByte('{')
+	enc.AddIntKey("status", status)
+	enc.AddStringKey("msg", msg)
+	enc.AddStringKey("error_id", generatedErrorID)
+	enc.AppendByte('}')
+	enc.Write()
+
+	return logger.Error().Str("errorId ", generatedErrorID)
+}
+
+// loggedJSONErrorWithPayload writes an error API response like loggedJsonError, but allows adding a source and extra (pre-serialised) json value.
+func loggedJSONErrorWithPayload(w http.ResponseWriter, msg string, status int, logger *zerolog.Logger, origin string, payload []byte) *zerolog.Event {
+	generatedErrorID := uuid.MustNewUUID().String()
+	apiWriteHeaders(w)
+	w.WriteHeader(status)
+
+	enc := gojay.BorrowEncoder(w)
+	defer enc.Release()
+
+	enc.AppendByte('{')
+	enc.AddIntKey("status", status)
+	enc.AddStringKey("msg", msg)
+	enc.AddStringKey("error_id", generatedErrorID)
+	enc.AddStringKey("origin", origin)
+	enc.AddEmbeddedJSONKeyOmitEmpty("more", (*gojay.EmbeddedJSON)(&payload))
+	enc.AppendByte('}')
+	enc.Write()
+
+	return logger.Error().Str("errorId ", generatedErrorID).Str("origin", origin)
 }

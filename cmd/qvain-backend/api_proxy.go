@@ -30,8 +30,7 @@ func makeProxyErrorHandler(logger zerolog.Logger) func(http.ResponseWriter, *htt
 	// log only every N proxy error
 	//logger = logger.Sample(&zerolog.BasicSampler{N: 3})
 	return func(w http.ResponseWriter, r *http.Request, err error) {
-		logger.Info().Err(err).Msg("upstream error")
-		jsonError(w, convertNetError(err), http.StatusBadGateway)
+		loggedJSONError(w, convertNetError(err), http.StatusBadGateway, &logger).Err(err).Msg("upstream error")
 	}
 }
 
@@ -151,7 +150,7 @@ func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) 
 		body, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			recorder := httptest.NewRecorder()
-			jsonError(recorder, "failed to read response body", http.StatusInternalServerError)
+			loggedJSONError(recorder, "failed to read response body", http.StatusInternalServerError, &logger).Err(err).Msg("Error while reading response body")
 			recorderToResponse(recorder, response)
 			return nil
 		}
@@ -163,7 +162,7 @@ func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) 
 		err = json.Unmarshal(body, &data)
 		if err != nil {
 			recorder := httptest.NewRecorder()
-			jsonError(recorder, "response is not json", http.StatusInternalServerError)
+			loggedJSONError(recorder, "response is not json", http.StatusInternalServerError, &logger).Err(err).Msg("Error While parsing JSON")
 			recorderToResponse(recorder, response)
 			return nil
 		}
@@ -174,7 +173,7 @@ func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) 
 			// Our error helper functions need a ResponseWriter so we cannot use response directly.
 			// Instead, we'll write to a ResponseRecorder and copy the result to the response.
 			recorder := httptest.NewRecorder()
-			sessionError(recorder, err)
+			sessionError(recorder, err, &logger).Err(err).Msg("Error while getting user session")
 			recorderToResponse(recorder, response)
 			return nil
 		}
@@ -182,7 +181,7 @@ func makeProxyModifyResponse(logger zerolog.Logger, sessions *sessions.Manager) 
 		// check response for project_identifier strings recursively
 		if !checkProjectIdentifier(session, data) {
 			recorder := httptest.NewRecorder()
-			jsonError(recorder, "invalid project in response", http.StatusForbidden)
+			loggedJSONError(recorder, "invalid project in response", http.StatusForbidden, &logger).Msg("Invalid project")
 			recorderToResponse(recorder, response)
 			return nil
 		}
@@ -223,43 +222,42 @@ func (api *ApiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// only allow access to /directories/ and /files/; path has been cleaned by Go on instantiation
 	if !(strings.HasPrefix(r.URL.Path, "/directories/") || strings.HasPrefix(r.URL.Path, "/files/")) {
-		jsonError(w, "access denied", http.StatusForbidden)
+		loggedJSONError(w, "access denied", http.StatusForbidden, &api.logger).Msg("error in api_proxy")
 	}
 
 	// make sure the user is authenticated
 	session, err := api.sessions.UserSessionFromRequest(r)
 	if err != nil {
-		sessionError(w, err)
+		sessionError(w, err, &api.logger).Err(err).Msg("Error: User is not authenticated")
 		return
 	}
 
 	// allowed_projects should be set by the proxy, not in the original request
 	query := r.URL.Query()
 	if _, found := query["allowed_projects"]; found {
-		jsonError(w, "bad request: allowed_projects is not allowed", http.StatusBadRequest)
+		loggedJSONError(w, "bad request: allowed_projects is not allowed", http.StatusBadRequest, &api.logger).Msg("api_proxy")
 		return
 	}
 
 	// proxy takes care of converting project to project_identifier as needed
 	if _, found := query["project_identifier"]; found {
-		jsonError(w, "bad request: project_identifier is not allowed", http.StatusBadRequest)
+		loggedJSONError(w, "bad request: project_identifier is not allowed", http.StatusBadRequest, &api.logger).Msg("api_proxy")
 		return
 	}
 
 	// check optional project query parameter
 	if projectQueries, found := query["project"]; found {
 		if len(projectQueries) > 1 {
-			jsonError(w, "bad request: multiple projects in query", http.StatusBadRequest)
+			loggedJSONError(w, "bad request: multiple projects in query", http.StatusBadRequest, &api.logger).Msg("api_proxy")
 			return
 		}
 		if len(session.User.Projects) < 1 {
-			jsonError(w, "access denied: user has no projects", http.StatusForbidden)
+			loggedJSONError(w, "access denied: user has no projects", http.StatusForbidden, &api.logger).Msg("api_proxy")
 			return
 		}
 		project := projectQueries[0]
 		if !session.User.HasProject(project) {
-			api.logger.Debug().Strs("projects", session.User.Projects).Str("wanted", project).Msg("project check")
-			jsonError(w, "access denied: invalid project", http.StatusForbidden)
+			loggedJSONError(w, "access denied: invalid project", http.StatusForbidden, &api.logger).Strs("projects", session.User.Projects).Str("wanted", project).Msg("project check")
 			return
 		}
 
@@ -282,7 +280,7 @@ func (api *ApiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := addPropertyToRequest(r, key, session.User.Identity); err != nil {
-			jsonError(w, err.Error(), http.StatusInternalServerError)
+			loggedJSONError(w, err.Error(), http.StatusInternalServerError, &api.logger).Msg("api_proxy")
 			return
 		}
 	}

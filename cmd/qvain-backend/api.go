@@ -57,7 +57,7 @@ func NewApis(config *Config) *Apis {
 	apis.sessions = NewSessionApi(
 		config.sessions,
 		config.NewLogger("sessions"),
-		config.oidcProviderUrl+"/idp/profile/Logout",
+		config.oidcProviderUrl+config.oidcLogoutPath,
 	)
 	apis.auth = NewAuthApi(config, makeOnFairdataLogin(metax, config.db, config.NewLogger("sync")), config.NewLogger("auth"))
 	apis.proxy = NewApiProxy(
@@ -68,8 +68,8 @@ func NewApis(config *Config) *Apis {
 		config.NewLogger("proxy"),
 		config.DevMode,
 	)
-	apis.lookup = NewLookupApi(config.db)
-	apis.stats = NewStatsApi(config.db, config.NewLogger("stats"), config.qvainStatsApiKey, !config.DevMode)
+	apis.lookup = NewLookupApi(config.db, config.NewLogger("lookup"), config.qvainLookupApiKey)
+	apis.stats = NewStatsApi(config.db, config.NewLogger("stats"), config.qvainStatsApiKey)
 
 	return apis
 }
@@ -102,10 +102,14 @@ func (apis *Apis) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		versionC.Add(1)
 		ifGet(w, r, apiVersion)
 	case "vars":
-		expvar.Handler().ServeHTTP(w, r)
+		if apis.config.DevMode {
+			expvar.Handler().ServeHTTP(w, r)
+		} else {
+			jsonError(w, "unknown api called: "+TrimSlash(head), http.StatusNotFound)
+		}
 	case "":
 		ifGet(w, r, welcome)
 	default:
-		jsonError(w, "unknown api called: "+TrimSlash(head), http.StatusNotFound)
+		loggedJSONError(w, "unknown api called: "+TrimSlash(head), http.StatusNotFound, &apis.logger).Str("head", head).Str("path", r.URL.Path).Msg("Error in api.serveHTTP()")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/CSCfi/qvain-api/pkg/models"
@@ -49,6 +50,12 @@ func LoadMetaxDataset(ds *models.Dataset) models.TypedDataset {
 	return &MetaxDataset{Dataset: ds}
 }
 
+func validateCumulativeState(stateJson string, published bool) bool {
+	return stateJson == "0" ||
+		stateJson == "1" ||
+		stateJson == "2" && published
+}
+
 // CreateData creates a dataset from template and merges set fields.
 func (dataset *MetaxDataset) CreateData(family int, schema string, blob []byte, extra map[string]string) error {
 	if family == 0 {
@@ -74,16 +81,33 @@ func (dataset *MetaxDataset) CreateData(family int, schema string, blob []byte, 
 	template["research_dataset"] = (*json.RawMessage)(&blob)
 	template["editor"] = (*json.RawMessage)(&editorJson)
 
-	//user, _ := json.Marshal(dataset.Dataset.Creator.String())
-	//template["metadata_provider_user"] = (*json.RawMessage)(&user)
 	if extra != nil {
-		if extid, ok := extra["identity"]; ok && extid != "" {
+		// keep track of used keys so we can check for unused ones
+		usedKeys := make(map[string]bool)
+		getExtra := func(key string) (string, bool) {
+			usedKeys[key] = true
+			val, ok := extra[key]
+			return val, ok
+		}
+
+		if extid, ok := getExtra("identity"); ok && extid != "" {
 			extidJson, _ := json.Marshal(extid)
 			template["metadata_provider_user"] = (*json.RawMessage)(&extidJson)
 		}
-		if org, ok := extra["org"]; ok && org != "" {
+		if org, ok := getExtra("org"); ok && org != "" {
 			orgJson, _ := json.Marshal(org)
 			template["metadata_provider_org"] = (*json.RawMessage)(&orgJson)
+		}
+
+		if cumulativeState, ok := getExtra("cumulative_state"); ok && cumulativeState != "" {
+			bytes := []byte(cumulativeState)
+			template["cumulative_state"] = (*json.RawMessage)(&bytes)
+		}
+
+		for key := range extra {
+			if !usedKeys[key] {
+				return fmt.Errorf("unknown key %s in extra map", key)
+			}
 		}
 	}
 
@@ -121,10 +145,16 @@ func (dataset *MetaxDataset) UpdateData(family int, schema string, blob []byte, 
 		ResearchDataset *json.RawMessage `json:"research_dataset"`
 		Editor          *Editor          `json:"editor"`
 		Extid           string           `json:"metadata_provider_user,omitempty"`
+		CumulativeState *json.RawMessage `json:"cumulative_state,omitempty"`
 	}{
 		ResearchDataset: (*json.RawMessage)(&blob),
 		Editor:          editor,
 		Extid:           extid,
+	}
+
+	if cumulativeState, ok := extra["cumulative_state"]; ok && cumulativeState != "" {
+		bytes := []byte(cumulativeState)
+		patchedFields.CumulativeState = (*json.RawMessage)(&bytes)
 	}
 
 	newBlob, err := json.MarshalIndent(patchedFields, "", "\t")
@@ -137,8 +167,42 @@ func (dataset *MetaxDataset) UpdateData(family int, schema string, blob []byte, 
 	return nil
 }
 
-// ValidateUpdatedDataset checks that updated dataset can be saved.
-func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) error {
+// fields that only Metax can set and change
+var commonReadOnlyFields = []string{
+	"research_dataset.metadata_version_identifier",
+	"research_dataset.preferred_identifier",
+	"research_dataset.total_files_byte_size",
+	"preservation_state",
+}
+
+// validate does common validation for both created and updated datasets
+func (dataset *MetaxDataset) validate() error {
+	cumulativeState := gjson.GetBytes(dataset.Blob(), "cumulative_state").Raw
+	if cumulativeState != "" && !validateCumulativeState(cumulativeState, dataset.Published) {
+		return fmt.Errorf("invalid cumulative_state value %s", cumulativeState)
+	}
+	return nil
+}
+
+// ValidateCreated performs checks on created dataset.
+func (dataset *MetaxDataset) ValidateCreated() error {
+	if err := dataset.validate(); err != nil {
+		return err
+	}
+
+	// check that readOnly fields have not changed
+	for _, field := range commonReadOnlyFields {
+		val := gjson.GetBytes(dataset.Blob(), field)
+		if val.Exists() {
+			return fmt.Errorf("readonly field %s should not be set, has value: %s", field, val.Raw)
+		}
+	}
+
+	return nil
+}
+
+// ValidateUpdated checks that updated dataset can be saved.
+func (dataset *MetaxDataset) ValidateUpdated(updated *models.Dataset) error {
 	if dataset.Family() != updated.Family() {
 		return errors.New("dataset family mismatch")
 	}
@@ -147,11 +211,20 @@ func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) err
 		return errors.New("dataset schema mismatch")
 	}
 
-	// readOnly fields from the schema
-	readOnlyFields := []string{
-		"research_dataset.metadata_version_identifier",
-		"research_dataset.preferred_identifier",
-		"research_dataset.total_files_byte_size",
+	if err := (&MetaxDataset{Dataset: updated}).validate(); err != nil {
+		return err
+	}
+
+	preservationState := gjson.GetBytes(dataset.Blob(), "preservation_state").Int()
+	if preservationState >= 80 {
+		return fmt.Errorf("cannot make changes to dataset with preservation_state >= 80")
+	}
+
+	readOnlyFields := commonReadOnlyFields
+
+	// only Metax can change cumulative_state after dataset has been published
+	if dataset.Published {
+		readOnlyFields = append(readOnlyFields, "cumulative_state")
 	}
 
 	// check that readOnly fields have not changed
@@ -159,7 +232,70 @@ func (dataset *MetaxDataset) ValidateUpdatedDataset(updated *models.Dataset) err
 		oldVal := gjson.GetBytes(dataset.Blob(), field).Raw
 		newVal := gjson.GetBytes(updated.Blob(), field).Raw
 		if oldVal != newVal {
+			if !strings.Contains(field, ".") && newVal == "" {
+				continue // missing top-level fields are ok, will use the existing value
+			}
 			return fmt.Errorf("readonly field %s changed %s -> %s", field, oldVal, newVal)
+		}
+	}
+
+	// catalog identifier can be either in data_catalog.identifier or directly as data_catalog
+	catalog := gjson.GetBytes(dataset.Blob(), "data_catalog.identifier").String()
+	if catalog == "" {
+		catalog = gjson.GetBytes(dataset.Blob(), "data_catalog").String()
+	}
+
+	// Checks that two (potentially nested) json values are equal. Normalizes the values
+	// by performing Unmarshal and Marshal for each value, and compares the resulting strings.
+	// The Marshal function sorts map keys so its output should be deterministic.
+	checkEqual := func(jsonA string, jsonB string) error {
+		// since an empty string does not contain a JSON value, check it separately
+		if jsonA == "" || jsonB == "" {
+			if jsonA != jsonB {
+				return errors.New("changes not allowed")
+			}
+			return nil
+		}
+
+		// If there are duplicate keys in objects, performing json.Unmarshal into an interface{} will
+		// only use the last value, which is also how the PostgreSQL jsonb type behaves.
+		var a, b interface{}
+		err := json.Unmarshal([]byte(jsonA), &a)
+		if err != nil {
+			return err
+		}
+
+		err = json.Unmarshal([]byte(jsonB), &b)
+		if err != nil {
+			return err
+		}
+
+		normalizedA, err := json.Marshal(a)
+		if err != nil {
+			return err
+		}
+
+		normalizedB, err := json.Marshal(b)
+		if err != nil {
+			return err
+		}
+		if string(normalizedA) != string(normalizedB) {
+			return errors.New("changes not allowed")
+		}
+		return nil
+	}
+
+	// changing files or directories for old dataset versions or PAS datasets is forbidden
+	isPas := preservationState > 0 || catalog == "urn:nbn:fi:att:data-catalog-pas"
+	isOld := gjson.GetBytes(dataset.Blob(), "next_dataset_version.identifier").String() != ""
+	if isPas || isOld {
+		err := checkEqual(gjson.GetBytes(dataset.Blob(), "research_dataset.files").Raw, gjson.GetBytes(updated.Blob(), "research_dataset.files").Raw)
+		if err != nil {
+			return fmt.Errorf("files: %s", err.Error())
+		}
+		err = checkEqual(gjson.GetBytes(dataset.Blob(), "research_dataset.directories").Raw, gjson.GetBytes(updated.Blob(), "research_dataset.directories").Raw)
+		if err != nil {
+			return fmt.Errorf("directories: %s", err.Error())
 		}
 	}
 

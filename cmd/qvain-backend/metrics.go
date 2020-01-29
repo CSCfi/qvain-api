@@ -10,7 +10,6 @@ import (
 var (
 	// api counters
 	datasetsC expvar.Int
-	objectsC  expvar.Int
 	sessionsC expvar.Int
 	authC     expvar.Int
 	proxyC    expvar.Int
@@ -61,7 +60,6 @@ func getNumCgoCall() interface{} {
 
 func init() {
 	metricsApis.Set("datasets", &datasetsC)
-	metricsApis.Set("objects", &objectsC)
 	metricsApis.Set("sessions", &sessionsC)
 	metricsApis.Set("auth", &authC)
 	metricsApis.Set("proxy", &proxyC)
