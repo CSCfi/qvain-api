@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/base64"
 	"strings"
 
 	"github.com/francoispqt/gojay"
@@ -122,5 +123,27 @@ func (user *User) AddAllowedProjects(rawQuery string) string {
 		rawQuery += "&"
 	}
 	rawQuery += "allowed_projects=" + userProjects
+	return rawQuery
+}
+
+// AccessGranter is used for REMS access granter metadata.
+type AccessGranter struct {
+	UserID string `json:"userid"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+}
+
+// AddAccessGranter adds REMS access granter metadata to query string.
+func (user *User) AddAccessGranter(rawQuery string) string {
+	if rawQuery != "" {
+		rawQuery += "&"
+	}
+	granter := AccessGranter{
+		UserID: user.Identity,
+		Name:   user.Name,
+		Email:  user.Email,
+	}
+	b, _ := gojay.MarshalAny(granter)
+	rawQuery += "access_granter=" + base64.RawURLEncoding.EncodeToString(b)
 	return rawQuery
 }
