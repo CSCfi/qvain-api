@@ -74,6 +74,7 @@ github.com/tidwall/sjson v1.0.4 h1:UcdIRXff12Lpnu3OLtZvnc03g4vH2suXDXhBwBqmzYg=
 github.com/tidwall/sjson v1.0.4/go.mod h1:bURseu1nuBkFpIES5cz6zBtjmYeOQmEESshn7VpF15Y=
 github.com/valyala/fastjson v1.4.1 h1:hrltpHpIpkaxll8QltMU8c3QZ5+qIiCL8yKqPFJI/yE=
 github.com/valyala/fastjson v1.4.1/go.mod h1:nV6MsjxL2IMJQUoHDIrjEI7oLyeqK6aBD7EFWPsvP8o=
+github.com/wvh/sourcelink v0.0.0-20180329151122-13c149cfaa37 h1:yZjmRS5lZ7W4PJdW5Hc+vLn47e9bPOyXhXmmlJ8C0Q8=
 github.com/wvh/sourcelink v0.0.0-20180329151122-13c149cfaa37/go.mod h1:R9D39w6nKBJSix7Xzg0zFBWiEaygAUoEaUue7tX5Q6s=
 github.com/wvh/uuid v0.0.0-20180305145759-746bc10d0c6f h1:pH8qIrpUmKeDs9IACmmnGO4eP7KtK27FM+MAJya5N3o=
 github.com/wvh/uuid v0.0.0-20180305145759-746bc10d0c6f/go.mod h1:gWdULBDu6VEdU74wNio2Rn0hk2abmVGEU1l9DKrEdGQ=
