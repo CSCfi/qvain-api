@@ -282,9 +282,39 @@ func TestValidateUpdatedDataset(t *testing.T) {
 	pasBlob, _ = sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`80`))
 	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
 
-	// if preservation_state >= 80, all updates should be forbidden
+	// if preservation_state >= 80 and not 100 or 130, all updates should be forbidden
 	err = TestField(t, "research_dataset.some_field", []byte(`"some_value"`))
 	if err == nil {
 		t.Fatalf("expected an error")
+	}
+
+	// change to another non-editable preservation state
+	pasBlob, _ = sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`120`))
+	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
+
+	// if preservation_state >= 80 and not 100 or 130, all updates should be forbidden
+	err = TestField(t, "research_dataset.some_field", []byte(`"some_value"`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// change to an editable preservation state
+	pasBlob, _ = sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`100`))
+	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
+
+	// preservation_states 100 and 130 should allow editing
+	err = TestField(t, "research_dataset.some_field", []byte(`"some_value"`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// change to another editable preservation state
+	pasBlob, _ = sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`130`))
+	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
+
+	// preservation_states 100 and 130 should allow editing
+	err = TestField(t, "research_dataset.some_field", []byte(`"some_value"`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
 	}
 }

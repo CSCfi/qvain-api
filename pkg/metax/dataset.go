@@ -216,8 +216,8 @@ func (dataset *MetaxDataset) ValidateUpdated(updated *models.Dataset) error {
 	}
 
 	preservationState := gjson.GetBytes(dataset.Blob(), "preservation_state").Int()
-	if preservationState >= 80 {
-		return fmt.Errorf("cannot make changes to dataset with preservation_state >= 80")
+	if preservationState >= 80 && preservationState != 100 && preservationState != 130 {
+		return fmt.Errorf("cannot make changes to dataset if preservation_state >= 80 && preservation_state != 100 && preservation_state != 130")
 	}
 
 	readOnlyFields := commonReadOnlyFields
