@@ -37,7 +37,7 @@ func NewAuthApi(config *Config, onLogin loginHook, logger zerolog.Logger) *AuthA
 		config.oidcProviderName,
 		config.oidcClientID,
 		config.oidcClientSecret,
-		"https://"+config.Hostname+"/api/auth/cb",
+		"https://"+config.Hostname+config.DevPort+"/api/auth/cb",
 		config.oidcProviderUrl,
 		"/login",
 		oidc.WithAllowDevLogin(config.DevMode),
@@ -46,7 +46,7 @@ func NewAuthApi(config *Config, onLogin loginHook, logger zerolog.Logger) *AuthA
 	if err != nil {
 		logger.Error().Err(err).Str("idp", config.oidcProviderName).Msg("oidc configuration failed")
 		api.ServeHTTP = func(w http.ResponseWriter, r *http.Request) {
-			jsonError(w, "no authentication endpoints configured", http.StatusNotFound)
+			loggedJSONError(w, "no authentication endpoints configured", http.StatusNotFound, &logger).Err(err).Str("idp", config.oidcProviderName).Msg("oidc configuration failed")
 		}
 	} else {
 		oidcClient.SetLogger(oidcLogger)
@@ -76,7 +76,7 @@ func (api *AuthApi) authHandler(w http.ResponseWriter, r *http.Request) {
 		api.oidc.callbackHandler.ServeHTTP(w, r)
 		return
 	}
-	jsonError(w, "unknown authentication method", http.StatusNotFound)
+	loggedJSONError(w, "unknown authentication method", http.StatusNotFound, &api.logger).Msg("Error in authHandler")
 }
 
 // listProviders lists configured providers at the auth endpoint.

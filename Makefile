@@ -15,6 +15,8 @@ SOURCELINK := ${GOBIN}/sourcelink
 
 export PATH := $(BINDIR):$(PATH):/usr/local/go/bin/
 
+GO_VERSION := $(shell go version)
+
 ### VCS
 TAG := $(shell git describe --tags --always --dirty="-dev" 2>/dev/null)
 HASH := $(shell git rev-parse --short HEAD 2>/dev/null)
@@ -107,8 +109,11 @@ cloc:
 	cloc --exclude-dir=vendor .
 
 listall:
-	@echo version: $(TAG)
+	@echo
+	@echo $(GO_VERSION)
+	@echo qvain-api version: $(TAG)
 	@echo building all: $(CMDS)
+	@echo
 
 check: lint staticcheck gosec
 	@echo

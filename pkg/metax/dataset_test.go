@@ -136,11 +136,17 @@ func TestValidateUpdatedDataset(t *testing.T) {
 	rawDataset := `{
 		"data_catalog":{"id":1,"identifier":"urn:nbn:fi:att:data-catalog-ida"},
 		"identifier":"urn:nbn:fi:att:bfe2d120-6ceb-4949-9755-882ab54c45b2",
+		"cumulative_state": 0,
 		"research_dataset":{
 			"title":{"en":"Wonderful Title"},
 			"total_files_byte_size":200,
 			"preferred_identifier":"urn:nbn:fi:att:fe7ed696-2a60-4d0c-b707-ee02c2bcd616",
-			"metadata_version_identifier":"urn:nbn:fi:att:be138915-2b91-4dbe-91b0-8f4e72e816b4"
+			"metadata_version_identifier":"urn:nbn:fi:att:be138915-2b91-4dbe-91b0-8f4e72e816b4",
+			"directories":[{"directory_path":"/directory", "some_extra_thing": 10}],
+			"files":[
+				{"file_path":"/directory/file1"},
+				{"file_path":"/directory/file2"}
+			]
 		}
 	}`
 	unparsed := MetaxRawRecord{json.RawMessage(rawDataset)}
@@ -159,7 +165,7 @@ func TestValidateUpdatedDataset(t *testing.T) {
 			t.Fatalf("expected no error, got: %v", err)
 		}
 		updated.SetData(updated.Family(), updated.Schema(), newBlob)
-		return metaxDataset.ValidateUpdatedDataset(updated)
+		return metaxDataset.ValidateUpdated(updated)
 	}
 
 	TestDeleteField := func(t *testing.T, field string) error {
@@ -171,7 +177,7 @@ func TestValidateUpdatedDataset(t *testing.T) {
 			t.Fatalf("expected no error, got: %v", err)
 		}
 		updated.SetData(updated.Family(), updated.Schema(), newBlob)
-		return metaxDataset.ValidateUpdatedDataset(updated)
+		return metaxDataset.ValidateUpdated(updated)
 	}
 
 	// change preferred identifier
@@ -200,5 +206,115 @@ func TestValidateUpdatedDataset(t *testing.T) {
 	err = TestDeleteField(t, "research_dataset.metadata_version_identifier")
 	if err == nil {
 		t.Fatalf("expected an error")
+	}
+
+	// change files
+	err = TestField(t, "research_dataset.files", []byte(`[{"file_path":"/directory/file3"}]`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// change cumulative_state
+	err = TestField(t, "cumulative_state", []byte(`0`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	err = TestField(t, "cumulative_state", []byte(`1`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	err = TestField(t, "cumulative_state", []byte(`2`)) // 2 not valid initial state
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// set cumulative_state for published dataset
+	metaxDataset.Published = true
+	err = TestField(t, "cumulative_state", []byte(`0`)) // ok because state didn't change
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	err = TestField(t, "cumulative_state", []byte(`1`)) // error, state change not allowed
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// set metaxDataset catalog to PAS, which will prevent altering files/directories
+	pasBlob, _ := sjson.SetRawBytes(metaxDataset.Blob(), "data_catalog", []byte(`{"id":3,"identifier":"urn:nbn:fi:att:data-catalog-pas"}`))
+	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
+
+	// change files
+	err = TestField(t, "research_dataset.files", []byte(`[{"file_path":"/directory/file3"}]`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// change order of files in array
+	err = TestField(t, "research_dataset.files", []byte(`[
+		{"file_path":"/directory/file2"},{"file_path":"/directory/file1"}
+	]`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// change value of directory
+	err = TestField(t, "research_dataset.directories",
+		[]byte(`[{"directory_path":"/directory", "some_extra_thing": 12}]`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// change order of keys in directory object
+	err = TestField(t, "research_dataset.directories",
+		[]byte(`[{"some_extra_thing": 10, "directory_path":"/directory"}]`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// repeated keys in directory object, only the last one is taken into account
+	err = TestField(t, "research_dataset.directories",
+		[]byte(`[{"directory_path":"/directory", "some_extra_thing": 20, "some_extra_thing": 10}]`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// add preservation state to metaxDataset
+	pasBlob, _ = sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`80`))
+	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
+
+	// if preservation_state >= 80 and not 100 or 130, all updates should be forbidden
+	err = TestField(t, "research_dataset.some_field", []byte(`"some_value"`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// change to another non-editable preservation state
+	pasBlob, _ = sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`120`))
+	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
+
+	// if preservation_state >= 80 and not 100 or 130, all updates should be forbidden
+	err = TestField(t, "research_dataset.some_field", []byte(`"some_value"`))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	// change to an editable preservation state
+	pasBlob, _ = sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`100`))
+	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
+
+	// preservation_states 100 and 130 should allow editing
+	err = TestField(t, "research_dataset.some_field", []byte(`"some_value"`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// change to another editable preservation state
+	pasBlob, _ = sjson.SetRawBytes(metaxDataset.Blob(), "preservation_state", []byte(`130`))
+	metaxDataset.SetData(metaxDataset.Family(), metaxDataset.Schema(), pasBlob)
+
+	// preservation_states 100 and 130 should allow editing
+	err = TestField(t, "research_dataset.some_field", []byte(`"some_value"`))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
 	}
 }

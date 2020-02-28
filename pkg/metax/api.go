@@ -21,12 +21,15 @@ import (
 
 	"github.com/CSCfi/qvain-api/pkg/models"
 	"github.com/rs/zerolog"
+	"github.com/tidwall/gjson"
 )
 
 const (
 	Verbose = false
 
-	DatasetsEndpoint = "/rest/datasets/"
+	DatasetsEndpoint                = "/rest/datasets/"
+	ChangeCumulativeStateEndpoint   = "/rpc/datasets/change_cumulative_state"
+	RefreshDirectoryContentEndpoint = "/rpc/datasets/refresh_directory_content"
 )
 
 var (
@@ -44,7 +47,9 @@ type MetaxService struct {
 	returnLatestVersion bool
 	logger              zerolog.Logger
 
-	urlDatasets string
+	urlDatasets                string
+	urlChangeCumulativeState   string
+	urlRefreshDirectoryContent string
 
 	user string
 	pass string
@@ -137,6 +142,8 @@ func NewMetaxService(host string, params ...MetaxOption) *MetaxService {
 
 func (api *MetaxService) makeEndpoints(base string) {
 	api.urlDatasets = base + DatasetsEndpoint
+	api.urlChangeCumulativeState = base + ChangeCumulativeStateEndpoint
+	api.urlRefreshDirectoryContent = base + RefreshDirectoryContentEndpoint
 }
 
 type PaginatedResponse struct {
@@ -565,6 +572,7 @@ func (api *MetaxService) Store(ctx context.Context, blob json.RawMessage, owner 
 		return nil, err
 	}
 	req.URL.RawQuery = owner.AddAllowedProjects(req.URL.RawQuery)
+	req.URL.RawQuery = owner.AddAccessGranter(req.URL.RawQuery)
 
 	api.writeApiHeaders(req)
 
@@ -741,4 +749,96 @@ func (api *MetaxService) getDataset(id string, removed bool) (json.RawMessage, e
 	}
 
 	return body, nil
+}
+
+// ChangeCumulativeState calls Metax RPC for changing cumulative state of a dataset with given Metax identifier.
+// Returns the new Metax identifier if a new dataset version was created.
+func (api *MetaxService) ChangeCumulativeState(ctx context.Context, identifier string, cumulativeState string) (newMetaxId string, err error) {
+	req, err := http.NewRequest(http.MethodPost, api.urlChangeCumulativeState, nil)
+	if err != nil {
+		return "", err
+	}
+	q := req.URL.Query()
+	q.Add("identifier", identifier)
+	q.Add("cumulative_state", cumulativeState)
+	req.URL.RawQuery = q.Encode()
+
+	api.writeApiHeaders(req)
+
+	start := time.Now()
+	defer func() {
+		api.logger.Printf("metax: change_cumulative_state processed in %v", time.Since(start))
+	}()
+
+	res, err := api.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+
+	body, _ := ioutil.ReadAll(res.Body)
+
+	switch res.StatusCode {
+	case 200: // success, new version created
+		return gjson.GetBytes(body, "new_version_created.identifier").String(), nil
+	case 204: // success
+		return "", nil
+	case 400:
+		return "", &ApiError{"invalid request", body, res.StatusCode}
+	case 401:
+		return "", &ApiError{"authorisation required", body, res.StatusCode}
+	case 403:
+		return "", &ApiError{"forbidden", body, res.StatusCode}
+	case 404:
+		return "", &ApiError{"not found", body, res.StatusCode}
+	default:
+		return "", &ApiError{"API returned error", body, res.StatusCode}
+	}
+}
+
+// RefreshDirectoryContent calls Metax RPC for updating directory contents on a published dataset.
+// If the directory has new files that aren't yet in the dataset, they will be added.
+// Returns the new Metax identifier if a new dataset version was created.
+func (api *MetaxService) RefreshDirectoryContent(ctx context.Context,
+	datasetIdentifier string, directoryIdentifier string) (newMetaxId string, err error) {
+	req, err := http.NewRequest(http.MethodPost, api.urlRefreshDirectoryContent, nil)
+	if err != nil {
+		return "", err
+	}
+	q := req.URL.Query()
+	q.Add("cr_identifier", datasetIdentifier)
+	q.Add("dir_identifier", directoryIdentifier)
+	req.URL.RawQuery = q.Encode()
+
+	api.writeApiHeaders(req)
+
+	start := time.Now()
+	defer func() {
+		api.logger.Printf("metax: refresh_directory_content in %v", time.Since(start))
+	}()
+
+	res, err := api.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+
+	body, _ := ioutil.ReadAll(res.Body)
+
+	switch res.StatusCode {
+	case 200: // success, new version created
+		return gjson.GetBytes(body, "new_version_created.identifier").String(), nil
+	case 204: // success
+		return "", nil
+	case 400:
+		return "", &ApiError{"invalid request", body, res.StatusCode}
+	case 401:
+		return "", &ApiError{"authorisation required", body, res.StatusCode}
+	case 403:
+		return "", &ApiError{"forbidden", body, res.StatusCode}
+	case 404:
+		return "", &ApiError{"not found", body, res.StatusCode}
+	default:
+		return "", &ApiError{"API returned error", body, res.StatusCode}
+	}
 }

@@ -112,8 +112,8 @@ func (tx *Tx) createWithMetadata(dataset *models.Dataset) error {
 // StoreNewVersion inserts a new version of an existing dataset, copying most fields.
 func (tx *Tx) StoreNewVersion(basedOn uuid.UUID, id uuid.UUID, created time.Time, blob []byte) error {
 	tag, err := tx.Exec(`
-	INSERT INTO datasets (id, creator, owner, created, synced, published, valid, family, schema, blob)
-		SELECT $2, creator, owner, $3, $3, true, true, family, schema, $4
+	INSERT INTO datasets (id, creator, owner, created, modified, synced, published, valid, family, schema, blob)
+		SELECT $2, creator, owner, $3, $3, $3, true, true, family, schema, $4
 		FROM datasets
 		WHERE id = $1
 	`, basedOn.Array(), id.Array(), created, blob)

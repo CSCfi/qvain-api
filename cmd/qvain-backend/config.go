@@ -21,6 +21,7 @@ type Config struct {
 	// application settings
 	Hostname      string
 	Port          string
+	DevPort       string
 	Standalone    bool
 	ForceHttpOnly bool
 	Debug         bool
@@ -41,9 +42,11 @@ type Config struct {
 	oidcProviderUrl  string
 	oidcClientID     string
 	oidcClientSecret string
+	oidcLogoutPath   string
 
 	// stats api settings
-	qvainStatsApiKey string
+	qvainStatsApiKey  string
+	qvainLookupApiKey string
 
 	// configured service instances
 	db        *psql.DB
@@ -82,25 +85,28 @@ func ConfigFromEnv() (*Config, error) {
 	}
 
 	return &Config{
-		Hostname:         hostname,
-		Port:             *appHttpPort,
-		Standalone:       env.GetBool("APP_HTTP_STANDALONE"),
-		ForceHttpOnly:    *forceHttpOnly,
-		Debug:            *appDebug,
-		DevMode:          *appDevMode,
-		Logging:          !*disableLogging,
-		LogRequests:      !*disableHttpLog,
-		Logger:           createAppLogger(ServiceName, *appDebug, *disableLogging),
-		UseHttpErrors:    env.GetBool("APP_HTTP_ERRORS"),
-		tokenKey:         key,
-		oidcProviderName: env.Get("APP_OIDC_PROVIDER_NAME"),
-		oidcProviderUrl:  env.Get("APP_OIDC_PROVIDER_URL"),
-		oidcClientID:     env.Get("APP_OIDC_CLIENT_ID"),
-		oidcClientSecret: env.Get("APP_OIDC_CLIENT_SECRET"),
-		MetaxApiHost:     env.Get("APP_METAX_API_HOST"),
-		metaxApiUser:     env.Get("APP_METAX_API_USER"),
-		metaxApiPass:     env.Get("APP_METAX_API_PASS"),
-		qvainStatsApiKey: env.Get("APP_QVAIN_STATS_API_KEY"),
+		Hostname:          hostname,
+		Port:              *appHttpPort,
+		DevPort:           env.GetDefault("APP_DEV_PORT",""),
+		Standalone:        env.GetBool("APP_HTTP_STANDALONE"),
+		ForceHttpOnly:     *forceHttpOnly,
+		Debug:             *appDebug,
+		DevMode:           *appDevMode,
+		Logging:           !*disableLogging,
+		LogRequests:       !*disableHttpLog,
+		Logger:            createAppLogger(ServiceName, *appDebug, *disableLogging),
+		UseHttpErrors:     env.GetBool("APP_HTTP_ERRORS"),
+		tokenKey:          key,
+		oidcProviderName:  env.Get("APP_OIDC_PROVIDER_NAME"),
+		oidcProviderUrl:   env.Get("APP_OIDC_PROVIDER_URL"),
+		oidcClientID:      env.Get("APP_OIDC_CLIENT_ID"),
+		oidcClientSecret:  env.Get("APP_OIDC_CLIENT_SECRET"),
+		oidcLogoutPath:    env.GetDefault("APP_OIDC_LOGOUT_PATH","/idp/profile/Logout"),
+		MetaxApiHost:      env.Get("APP_METAX_API_HOST"),
+		metaxApiUser:      env.Get("APP_METAX_API_USER"),
+		metaxApiPass:      env.Get("APP_METAX_API_PASS"),
+		qvainStatsApiKey:  env.Get("APP_QVAIN_STATS_API_KEY"),
+		qvainLookupApiKey: env.Get("APP_QVAIN_LOOKUP_API_KEY"),
 	}, nil
 }
 
