@@ -4,6 +4,8 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/CSCfi/qvain-api)](https://goreportcard.com/report/github.com/CSCfi/qvain-api)
 
+# This repository was made for an older version of Qvain which is no longer in use. Qvain is now part of Etsin. For equivalent functionality to this repository, see https://github.com/CSCfi/etsin-finder/
+
 # Qvain API
 
 ## Introduction
